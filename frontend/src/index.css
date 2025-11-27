@@ -1,0 +1,156 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar for dark mode */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f1f1f;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3d3d3d;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+}
+
+/* Selection color */
+::selection {
+  background-color: #0078d4;
+  color: #ffffff;
+}
+
+/* Remove default focus outline */
+*:focus-visible {
+  @apply outline-none;
+}
+
+/* Global base styles */
+@layer base {
+  body {
+    @apply bg-dark-bg text-dark-primary font-sans;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold;
+  }
+
+  input, textarea, select {
+    @apply bg-dark-tertiary text-dark-primary border border-dark-bg-secondary;
+  }
+
+  input:focus, textarea:focus, select:focus {
+    @apply border-teams-blue;
+    @apply ring-2 ring-teams-blue ring-opacity-20;
+  }
+}
+
+/* Utility components */
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-teams-blue text-white rounded-lg font-semibold hover:bg-teams-blue-hover transition-colors duration-200;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-dark-bg-secondary text-dark-primary border border-dark-bg-secondary rounded-lg font-semibold hover:border-teams-blue transition-colors duration-200;
+  }
+
+  .btn-danger {
+    @apply px-4 py-2 bg-teams-red text-white rounded-lg font-semibold hover:opacity-90 transition-opacity duration-200;
+  }
+
+  .btn-success {
+    @apply px-4 py-2 bg-teams-green text-white rounded-lg font-semibold hover:opacity-90 transition-opacity duration-200;
+  }
+
+  .card {
+    @apply bg-dark-bg-secondary border border-dark-bg-secondary rounded-xl p-6 shadow-teams-sm;
+  }
+
+  .card-header {
+    @apply text-lg font-semibold text-dark-primary mb-4 pb-4 border-b border-dark-bg-tertiary;
+  }
+
+  .card-footer {
+    @apply pt-4 mt-4 border-t border-dark-bg-tertiary flex gap-2;
+  }
+
+  .badge {
+    @apply px-3 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .badge-blue {
+    @apply bg-teams-blue bg-opacity-20 text-teams-blue;
+  }
+
+  .badge-green {
+    @apply bg-teams-green bg-opacity-20 text-teams-green;
+  }
+
+  .badge-red {
+    @apply bg-teams-red bg-opacity-20 text-teams-red;
+  }
+
+  .badge-orange {
+    @apply bg-teams-orange bg-opacity-20 text-teams-orange;
+  }
+
+  .input {
+    @apply w-full px-4 py-2 bg-dark-tertiary border border-dark-bg-secondary rounded-lg text-dark-primary placeholder-teams-gray-dark focus:border-teams-blue focus:ring-2 focus:ring-teams-blue focus:ring-opacity-20 transition-colors duration-200;
+  }
+
+  .label {
+    @apply block text-sm font-semibold text-dark-primary mb-2;
+  }
+
+  .form-group {
+    @apply mb-4;
+  }
+
+  .text-muted {
+    @apply text-teams-gray-dark;
+  }
+
+  .divider {
+    @apply border-t border-dark-bg-secondary my-4;
+  }
+
+  .alert {
+    @apply px-4 py-3 rounded-lg border-l-4 mb-4;
+  }
+
+  .alert-error {
+    @apply bg-teams-red bg-opacity-10 border-teams-red text-teams-red;
+  }
+
+  .alert-success {
+    @apply bg-teams-green bg-opacity-10 border-teams-green text-teams-green;
+  }
+
+  .alert-warning {
+    @apply bg-teams-orange bg-opacity-10 border-teams-orange text-teams-orange;
+  }
+
+  .alert-info {
+    @apply bg-teams-blue bg-opacity-10 border-teams-blue text-teams-blue;
+  }
+
+  .spinner {
+    @apply w-10 h-10 border-4 border-dark-bg-secondary border-t-teams-blue rounded-full animate-spin;
+  }
+
+  .table-row-hover {
+    @apply hover:bg-dark-bg-tertiary transition-colors duration-200;
+  }
+
+  .link {
+    @apply text-teams-blue hover:text-teams-blue-hover underline transition-colors duration-200;
+  }
+}

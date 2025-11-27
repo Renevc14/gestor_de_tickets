@@ -1,0 +1,19 @@
+  Login como ADMIN:
+  - Usuario: admin
+  - Contraseña: Admin12345!@
+  → Verás "Audit Logs" en el menú
+
+  Login como SUPERVISOR:
+  - Usuario: supervisor
+  - Contraseña: Supervisor@12345
+  → Verás "Audit Logs" en el menú
+
+  Login como AGENTE N2:
+  - Usuario: agente_nivel2
+  - Contraseña: Agente2@123456
+  → NO verás "Audit Logs"
+
+  Login como CLIENTE:
+  - Usuario: cliente_test
+  - Contraseña: Cliente@123456
+  → NO verás "Audit Logs"

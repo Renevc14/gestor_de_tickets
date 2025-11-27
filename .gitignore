@@ -1,0 +1,35 @@
+# Backend
+backend/node_modules/
+backend/.env
+backend/.env.local
+backend/.env.*.local
+backend/uploads/
+backend/dist/
+backend/build/
+
+# Frontend
+frontend/node_modules/
+frontend/.env.local
+frontend/.env.*.local
+frontend/build/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.classpath
+*.log
+
+# Dependencias
+package-lock.json
+yarn.lock
+
+# Temporal
+*.tmp
+*.bak
+.cache/

@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm start)",
+      "Bash(timeout 5 bash:*)",
+      "Bash(timeout 30 bash:*)",
+      "Bash(node viewDatabase.js:*)",
+      "Bash(ls:*)",
+      "Bash(node createUsers.js:*)",
+      "Bash(npm install:*)",
+      "Bash(pkill:*)",
+      "Bash(timeout 10 bash:*)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(powershell -Command \"Stop-Process -Id 33852 -Force; echo ''Proceso terminado''\")",
+      "Bash(powershell:*)",
+      "Bash(timeout 25 bash:*)",
+      "Bash(lsof:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(npm exec:*)",
+      "Bash(xargs kill:*)",
+      "Bash(node test-flow.js:*)",
+      "Bash(node:*)",
+      "Bash(cat:*)",
+      "Bash(curl:*)",
+      "Bash(xargs:*)",
+      "Bash(npm run dev:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
