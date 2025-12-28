@@ -2,155 +2,615 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom scrollbar for dark mode */
+/* ============================================
+   JIRA DARK THEME - Global Styles
+   ============================================ */
+
+/* Custom scrollbar for Jira dark mode */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #1f1f1f;
+  background: #1D2125;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3d3d3d;
+  background: #454F59;
   border-radius: 4px;
+  transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #5a5a5a;
+  background: #596773;
 }
 
-/* Selection color */
+/* Selection color - Jira blue */
 ::selection {
-  background-color: #0078d4;
-  color: #ffffff;
+  background-color: #579DFF;
+  color: #1D2125;
 }
 
-/* Remove default focus outline */
+/* Remove default focus outline, add custom */
 *:focus-visible {
-  @apply outline-none;
+  @apply outline-none ring-2 ring-jira-blue ring-opacity-50;
 }
 
-/* Global base styles */
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ============================================
+   BASE LAYER - Foundation Styles
+   ============================================ */
 @layer base {
   body {
-    @apply bg-dark-bg text-dark-primary font-sans;
+    @apply bg-jira-bg text-jira-text font-sans antialiased;
+    background-image:
+      radial-gradient(ellipse at top left, rgba(87, 157, 255, 0.03) 0%, transparent 50%),
+      radial-gradient(ellipse at bottom right, rgba(159, 143, 239, 0.03) 0%, transparent 50%);
+    background-attachment: fixed;
   }
 
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-semibold;
+  h1 {
+    @apply text-2xl font-semibold text-jira-text tracking-tight;
   }
 
+  h2 {
+    @apply text-xl font-semibold text-jira-text tracking-tight;
+  }
+
+  h3 {
+    @apply text-lg font-medium text-jira-text;
+  }
+
+  h4, h5, h6 {
+    @apply font-medium text-jira-text;
+  }
+
+  a {
+    @apply text-jira-blue transition-colors duration-200;
+  }
+
+  a:hover {
+    @apply text-jira-blue-bold;
+  }
+
+  /* Form elements base styles */
   input, textarea, select {
-    @apply bg-dark-tertiary text-dark-primary border border-dark-bg-secondary;
+    @apply bg-jira-bg-input text-jira-text border border-jira-border-bold rounded-jira-md;
+    @apply transition-all duration-200 ease-jira;
+  }
+
+  input::placeholder, textarea::placeholder {
+    @apply text-jira-text-subtlest;
+  }
+
+  input:hover, textarea:hover, select:hover {
+    @apply border-jira-text-subtlest;
   }
 
   input:focus, textarea:focus, select:focus {
-    @apply border-teams-blue;
-    @apply ring-2 ring-teams-blue ring-opacity-20;
+    @apply border-jira-blue ring-2 ring-jira-blue ring-opacity-25 bg-jira-bg-elevated;
+  }
+
+  /* Disabled state */
+  input:disabled, textarea:disabled, select:disabled {
+    @apply opacity-50 cursor-not-allowed;
   }
 }
 
-/* Utility components */
+/* ============================================
+   COMPONENTS LAYER - Reusable UI Components
+   ============================================ */
 @layer components {
+
+  /* -------- BUTTONS -------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 font-medium rounded-jira-md;
+    @apply transition-all duration-200 ease-jira;
+    @apply focus:ring-2 focus:ring-offset-2 focus:ring-offset-jira-bg;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply active:scale-[0.98];
+  }
+
   .btn-primary {
-    @apply px-4 py-2 bg-teams-blue text-white rounded-lg font-semibold hover:bg-teams-blue-hover transition-colors duration-200;
+    @apply btn bg-jira-blue text-jira-text-inverse;
+    @apply hover:bg-jira-blue-bold hover:shadow-jira-glow;
+    @apply focus:ring-jira-blue;
   }
 
   .btn-secondary {
-    @apply px-4 py-2 bg-dark-bg-secondary text-dark-primary border border-dark-bg-secondary rounded-lg font-semibold hover:border-teams-blue transition-colors duration-200;
+    @apply btn bg-jira-bg-elevated text-jira-text border border-jira-border-bold;
+    @apply hover:bg-jira-bg-hover hover:border-jira-text-subtlest;
+    @apply focus:ring-jira-text-subtlest;
   }
 
   .btn-danger {
-    @apply px-4 py-2 bg-teams-red text-white rounded-lg font-semibold hover:opacity-90 transition-opacity duration-200;
+    @apply btn bg-jira-red-subtle text-jira-red;
+    @apply hover:bg-jira-red hover:text-jira-text-inverse hover:shadow-jira-glow-red;
+    @apply focus:ring-jira-red;
   }
 
   .btn-success {
-    @apply px-4 py-2 bg-teams-green text-white rounded-lg font-semibold hover:opacity-90 transition-opacity duration-200;
+    @apply btn bg-jira-green-subtle text-jira-green;
+    @apply hover:bg-jira-green hover:text-jira-text-inverse hover:shadow-jira-glow-green;
+    @apply focus:ring-jira-green;
   }
 
+  .btn-ghost {
+    @apply btn bg-transparent text-jira-text-subtle;
+    @apply hover:bg-jira-bg-hover hover:text-jira-text;
+  }
+
+  .btn-icon {
+    @apply p-2 rounded-jira-md text-jira-text-subtle;
+    @apply hover:bg-jira-bg-hover hover:text-jira-text;
+    @apply transition-all duration-200;
+  }
+
+  .btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+
+  .btn-lg {
+    @apply px-6 py-3 text-lg;
+  }
+
+  /* -------- CARDS -------- */
   .card {
-    @apply bg-dark-bg-secondary border border-dark-bg-secondary rounded-xl p-6 shadow-teams-sm;
+    @apply bg-jira-bg-card border border-jira-border rounded-jira-lg;
+    @apply shadow-jira-sm;
+    @apply transition-all duration-300 ease-jira;
+  }
+
+  .card:hover {
+    @apply shadow-jira-md border-jira-border-bold;
+  }
+
+  .card-elevated {
+    @apply card bg-jira-bg-elevated shadow-jira-md;
+  }
+
+  .card-interactive {
+    @apply card cursor-pointer;
+    @apply hover:bg-jira-bg-elevated hover:shadow-jira-lg hover:-translate-y-0.5;
   }
 
   .card-header {
-    @apply text-lg font-semibold text-dark-primary mb-4 pb-4 border-b border-dark-bg-tertiary;
+    @apply px-6 py-4 border-b border-jira-border;
+    @apply flex items-center justify-between;
+  }
+
+  .card-body {
+    @apply p-6;
   }
 
   .card-footer {
-    @apply pt-4 mt-4 border-t border-dark-bg-tertiary flex gap-2;
+    @apply px-6 py-4 border-t border-jira-border;
+    @apply flex items-center gap-3;
+    @apply bg-jira-bg/50;
   }
 
-  .badge {
-    @apply px-3 py-1 rounded-full text-xs font-semibold;
-  }
-
-  .badge-blue {
-    @apply bg-teams-blue bg-opacity-20 text-teams-blue;
-  }
-
-  .badge-green {
-    @apply bg-teams-green bg-opacity-20 text-teams-green;
-  }
-
-  .badge-red {
-    @apply bg-teams-red bg-opacity-20 text-teams-red;
-  }
-
-  .badge-orange {
-    @apply bg-teams-orange bg-opacity-20 text-teams-orange;
-  }
-
+  /* -------- INPUTS -------- */
   .input {
-    @apply w-full px-4 py-2 bg-dark-tertiary border border-dark-bg-secondary rounded-lg text-dark-primary placeholder-teams-gray-dark focus:border-teams-blue focus:ring-2 focus:ring-teams-blue focus:ring-opacity-20 transition-colors duration-200;
+    @apply w-full px-4 py-2.5 bg-jira-bg-input text-jira-text;
+    @apply border border-jira-border-bold rounded-jira-md;
+    @apply placeholder:text-jira-text-subtlest;
+    @apply transition-all duration-200 ease-jira;
+    @apply hover:border-jira-text-subtlest;
+    @apply focus:border-jira-blue focus:ring-2 focus:ring-jira-blue/25 focus:bg-jira-bg-elevated;
+  }
+
+  .input-error {
+    @apply input border-jira-red;
+    @apply focus:border-jira-red focus:ring-jira-red/25;
+  }
+
+  .input-success {
+    @apply input border-jira-green;
+    @apply focus:border-jira-green focus:ring-jira-green/25;
   }
 
   .label {
-    @apply block text-sm font-semibold text-dark-primary mb-2;
+    @apply block text-sm font-medium text-jira-text mb-2;
+  }
+
+  .label-required::after {
+    content: '*';
+    @apply text-jira-red ml-1;
   }
 
   .form-group {
-    @apply mb-4;
+    @apply mb-5;
   }
 
-  .text-muted {
-    @apply text-teams-gray-dark;
+  .form-hint {
+    @apply mt-1.5 text-sm text-jira-text-subtlest;
   }
 
-  .divider {
-    @apply border-t border-dark-bg-secondary my-4;
+  .form-error {
+    @apply mt-1.5 text-sm text-jira-red flex items-center gap-1;
   }
 
+  /* -------- BADGES -------- */
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold;
+    @apply transition-all duration-200;
+  }
+
+  .badge-blue {
+    @apply bg-jira-blue-subtle text-jira-blue;
+  }
+
+  .badge-green {
+    @apply bg-jira-green-subtle text-jira-green;
+  }
+
+  .badge-yellow {
+    @apply bg-jira-yellow-subtle text-jira-yellow;
+  }
+
+  .badge-orange {
+    @apply bg-jira-orange-subtle text-jira-orange;
+  }
+
+  .badge-red {
+    @apply bg-jira-red-subtle text-jira-red;
+  }
+
+  .badge-purple {
+    @apply bg-jira-purple/20 text-jira-purple;
+  }
+
+  .badge-teal {
+    @apply bg-jira-teal/20 text-jira-teal;
+  }
+
+  .badge-gray {
+    @apply bg-jira-bg-elevated text-jira-text-subtle;
+  }
+
+  /* Badge with dot indicator */
+  .badge-dot::before {
+    content: '';
+    @apply w-1.5 h-1.5 rounded-full bg-current;
+  }
+
+  /* -------- ALERTS -------- */
   .alert {
-    @apply px-4 py-3 rounded-lg border-l-4 mb-4;
-  }
-
-  .alert-error {
-    @apply bg-teams-red bg-opacity-10 border-teams-red text-teams-red;
-  }
-
-  .alert-success {
-    @apply bg-teams-green bg-opacity-10 border-teams-green text-teams-green;
-  }
-
-  .alert-warning {
-    @apply bg-teams-orange bg-opacity-10 border-teams-orange text-teams-orange;
+    @apply flex items-start gap-3 px-4 py-3 rounded-jira-md;
+    @apply border-l-4 animate-fade-in;
   }
 
   .alert-info {
-    @apply bg-teams-blue bg-opacity-10 border-teams-blue text-teams-blue;
+    @apply bg-jira-blue-subtle/50 border-jira-blue text-jira-blue;
   }
 
+  .alert-success {
+    @apply bg-jira-green-subtle/50 border-jira-green text-jira-green;
+  }
+
+  .alert-warning {
+    @apply bg-jira-yellow-subtle/50 border-jira-yellow text-jira-yellow;
+  }
+
+  .alert-error {
+    @apply bg-jira-red-subtle/50 border-jira-red text-jira-red;
+  }
+
+  /* -------- TABLES -------- */
+  .table-container {
+    @apply overflow-x-auto rounded-jira-lg border border-jira-border;
+  }
+
+  .table {
+    @apply w-full text-sm;
+  }
+
+  .table thead {
+    @apply bg-jira-bg-elevated;
+  }
+
+  .table th {
+    @apply px-4 py-3 text-left text-xs font-semibold text-jira-text-subtle uppercase tracking-wider;
+    @apply border-b border-jira-border;
+  }
+
+  .table td {
+    @apply px-4 py-3 text-jira-text;
+    @apply border-b border-jira-border;
+  }
+
+  .table tbody tr {
+    @apply transition-colors duration-150;
+  }
+
+  .table tbody tr:hover {
+    @apply bg-jira-bg-hover;
+  }
+
+  .table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  /* -------- LOADING STATES -------- */
   .spinner {
-    @apply w-10 h-10 border-4 border-dark-bg-secondary border-t-teams-blue rounded-full animate-spin;
+    @apply w-8 h-8 border-3 border-jira-bg-elevated border-t-jira-blue rounded-full;
+    @apply animate-spin;
   }
 
-  .table-row-hover {
-    @apply hover:bg-dark-bg-tertiary transition-colors duration-200;
+  .spinner-sm {
+    @apply w-4 h-4 border-2;
   }
 
+  .spinner-lg {
+    @apply w-12 h-12 border-4;
+  }
+
+  .skeleton {
+    @apply bg-jira-bg-elevated rounded-jira-md animate-pulse;
+  }
+
+  .shimmer {
+    @apply relative overflow-hidden;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(166, 197, 226, 0.1) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+  }
+
+  /* -------- TOOLTIPS -------- */
+  .tooltip {
+    @apply relative inline-block;
+  }
+
+  .tooltip-content {
+    @apply absolute z-50 px-3 py-2 text-sm text-jira-text bg-jira-bg-elevated;
+    @apply rounded-jira-md shadow-jira-lg border border-jira-border;
+    @apply invisible opacity-0 transition-all duration-200;
+    @apply -translate-y-1;
+  }
+
+  .tooltip:hover .tooltip-content {
+    @apply visible opacity-100 translate-y-0;
+  }
+
+  /* -------- DIVIDERS -------- */
+  .divider {
+    @apply border-t border-jira-border my-4;
+  }
+
+  .divider-vertical {
+    @apply border-l border-jira-border mx-4 h-full;
+  }
+
+  /* -------- LINKS -------- */
   .link {
-    @apply text-teams-blue hover:text-teams-blue-hover underline transition-colors duration-200;
+    @apply text-jira-blue font-medium;
+    @apply hover:text-jira-blue-bold hover:underline;
+    @apply transition-colors duration-200;
+  }
+
+  .link-subtle {
+    @apply text-jira-text-subtle;
+    @apply hover:text-jira-text;
+  }
+
+  /* -------- AVATARS -------- */
+  .avatar {
+    @apply inline-flex items-center justify-center rounded-full bg-jira-blue-subtle text-jira-blue font-semibold;
+    @apply overflow-hidden;
+  }
+
+  .avatar-sm {
+    @apply w-8 h-8 text-xs;
+  }
+
+  .avatar-md {
+    @apply w-10 h-10 text-sm;
+  }
+
+  .avatar-lg {
+    @apply w-12 h-12 text-base;
+  }
+
+  /* -------- TAGS -------- */
+  .tag {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium;
+    @apply bg-jira-bg-elevated text-jira-text-subtle rounded;
+    @apply border border-jira-border;
+  }
+
+  /* -------- PROGRESS -------- */
+  .progress {
+    @apply h-2 bg-jira-bg-elevated rounded-full overflow-hidden;
+  }
+
+  .progress-bar {
+    @apply h-full bg-jira-blue rounded-full;
+    @apply transition-all duration-500 ease-jira;
+  }
+
+  /* -------- NAVIGATION -------- */
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-jira-md;
+    @apply text-jira-text-subtle font-medium;
+    @apply transition-all duration-200;
+  }
+
+  .nav-item:hover {
+    @apply bg-jira-bg-hover text-jira-text;
+  }
+
+  .nav-item-active {
+    @apply bg-jira-bg-selected text-jira-blue;
+  }
+
+  /* -------- DROPDOWN -------- */
+  .dropdown-menu {
+    @apply absolute z-50 min-w-48 py-2;
+    @apply bg-jira-bg-elevated rounded-jira-md shadow-jira-xl;
+    @apply border border-jira-border;
+    @apply animate-scale-in origin-top-right;
+  }
+
+  .dropdown-item {
+    @apply flex items-center gap-3 px-4 py-2 text-sm text-jira-text;
+    @apply transition-colors duration-150;
+  }
+
+  .dropdown-item:hover {
+    @apply bg-jira-bg-hover;
+  }
+
+  .dropdown-divider {
+    @apply my-2 border-t border-jira-border;
+  }
+
+  /* -------- MODAL -------- */
+  .modal-overlay {
+    @apply fixed inset-0 z-50 bg-black/60 backdrop-blur-sm;
+    @apply flex items-center justify-center p-4;
+    @apply animate-fade-in;
+  }
+
+  .modal {
+    @apply bg-jira-bg-card rounded-jira-lg shadow-jira-xl;
+    @apply border border-jira-border;
+    @apply w-full max-w-lg;
+    @apply animate-scale-in;
+  }
+
+  .modal-header {
+    @apply flex items-center justify-between px-6 py-4;
+    @apply border-b border-jira-border;
+  }
+
+  .modal-body {
+    @apply p-6;
+  }
+
+  .modal-footer {
+    @apply flex items-center justify-end gap-3 px-6 py-4;
+    @apply border-t border-jira-border bg-jira-bg/50;
+  }
+
+  /* -------- SIDEBAR -------- */
+  .sidebar {
+    @apply fixed left-0 top-0 h-full w-64 bg-jira-bg-card;
+    @apply border-r border-jira-border;
+    @apply flex flex-col;
+  }
+
+  .sidebar-header {
+    @apply px-4 py-5 border-b border-jira-border;
+  }
+
+  .sidebar-content {
+    @apply flex-1 overflow-y-auto py-4;
+  }
+
+  .sidebar-footer {
+    @apply px-4 py-4 border-t border-jira-border;
+  }
+
+  /* -------- PAGE LAYOUTS -------- */
+  .page-container {
+    @apply min-h-screen bg-jira-bg;
+  }
+
+  .page-header {
+    @apply sticky top-0 z-40 bg-jira-bg-card/80 backdrop-blur-md;
+    @apply border-b border-jira-border;
+    @apply px-6 py-4;
+  }
+
+  .page-content {
+    @apply p-6;
+  }
+
+  .page-title {
+    @apply text-xl font-semibold text-jira-text;
+  }
+
+  .page-subtitle {
+    @apply text-sm text-jira-text-subtle mt-1;
+  }
+
+  /* -------- EMPTY STATES -------- */
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-16 text-center;
+  }
+
+  .empty-state-icon {
+    @apply w-16 h-16 text-jira-text-subtlest mb-4;
+  }
+
+  .empty-state-title {
+    @apply text-lg font-medium text-jira-text mb-2;
+  }
+
+  .empty-state-description {
+    @apply text-sm text-jira-text-subtle max-w-sm;
+  }
+}
+
+/* ============================================
+   UTILITIES LAYER - Custom Utilities
+   ============================================ */
+@layer utilities {
+  /* Text utilities */
+  .text-gradient {
+    @apply bg-gradient-to-r from-jira-blue to-jira-purple bg-clip-text text-transparent;
+  }
+
+  /* Glass effect */
+  .glass {
+    @apply bg-jira-bg-card/80 backdrop-blur-md border border-jira-border;
+  }
+
+  /* Glow effects */
+  .glow-blue {
+    @apply shadow-jira-glow;
+  }
+
+  .glow-green {
+    @apply shadow-jira-glow-green;
+  }
+
+  .glow-red {
+    @apply shadow-jira-glow-red;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Truncate text with ellipsis */
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .truncate-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 }

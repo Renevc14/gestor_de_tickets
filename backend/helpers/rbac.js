@@ -20,7 +20,7 @@ const permissions = {
     auditLogs: ['view_own']
   },
   agente_n2: {
-    tickets: ['create', 'read_assigned', 'update_assigned', 'escalate', 'add_comments'],
+    tickets: ['create', 'read_assigned', 'update_assigned', 'add_comments'],
     comments: ['create', 'read_assigned'],
     attachments: ['upload', 'download'],
     auditLogs: ['view_own']
@@ -108,22 +108,25 @@ function canAccessTicket(ticket, user, action) {
     return false;
   }
 
-  // Agentes ven tickets asignados
+  // Agentes ven tickets asignados o creados por ellos
   if (['agente_n1', 'agente_n2'].includes(role)) {
-    if (action === 'read_assigned' || action === 'update_assigned' || action === 'add_comments') {
-      // Manejar tanto ObjectId como documentos populados
-      const ticketAssigneeId = ticket.assignedTo?._id?.toString() || ticket.assignedTo?.toString();
-      const currentUserId = user._id.toString();
-      return ticketAssigneeId === currentUserId;
+    // Manejar tanto ObjectId como documentos populados
+    const ticketAssigneeId = ticket.assignedTo?._id?.toString() || ticket.assignedTo?.toString();
+    const ticketCreatorId = ticket.createdBy?._id?.toString() || ticket.createdBy?.toString();
+    const currentUserId = user._id.toString();
+
+    const isAssignedToUser = ticketAssigneeId === currentUserId;
+    const isCreatedByUser = ticketCreatorId === currentUserId;
+
+    if (action === 'read_assigned' || action === 'update_assigned') {
+      return isAssignedToUser;
+    }
+    if (action === 'add_comments') {
+      // Agentes pueden comentar en tickets asignados O creados por ellos
+      return isAssignedToUser || isCreatedByUser;
     }
     if (action === 'create') {
       return true;
-    }
-    if (action === 'escalate' && role === 'agente_n2') {
-      // Manejar tanto ObjectId como documentos populados
-      const ticketAssigneeId = ticket.assignedTo?._id?.toString() || ticket.assignedTo?.toString();
-      const currentUserId = user._id.toString();
-      return ticketAssigneeId === currentUserId;
     }
     return false;
   }
@@ -158,8 +161,11 @@ function getTicketFilters(user) {
 
     case 'agente_n1':
     case 'agente_n2':
-      // Agentes ven tickets asignados a ellos
-      filters.assignedTo = user._id;
+      // Agentes ven tickets asignados a ellos O creados por ellos
+      filters.$or = [
+        { assignedTo: user._id },
+        { createdBy: user._id }
+      ];
       break;
 
     case 'supervisor':

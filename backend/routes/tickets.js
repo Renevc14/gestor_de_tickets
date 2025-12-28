@@ -38,6 +38,17 @@ router.get(
 );
 
 /**
+ * GET /api/tickets/assignable-users
+ * CONTROL DE ACCESO - Listar usuarios que pueden recibir tickets
+ * NOTA: Esta ruta debe estar ANTES de /:id
+ */
+router.get(
+  '/assignable-users',
+  authenticateToken,
+  ticketController.getAssignableUsers
+);
+
+/**
  * GET /api/tickets/:id
  * INTEGRIDAD - Obtener detalles de un ticket
  */
@@ -55,16 +66,6 @@ router.put(
   '/:id',
   authenticateToken,
   ticketController.updateTicket
-);
-
-/**
- * POST /api/tickets/:id/escalate
- * INTEGRIDAD - Escalar ticket
- */
-router.post(
-  '/:id/escalate',
-  authenticateToken,
-  ticketController.escalateTicket
 );
 
 /**

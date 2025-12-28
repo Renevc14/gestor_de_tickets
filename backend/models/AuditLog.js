@@ -7,12 +7,18 @@ const mongoose = require('mongoose');
 
 const AuditLogSchema = new mongoose.Schema(
   {
-    // NO REPUDIO - Usuario que realizó la acción
+    // NO REPUDIO - Usuario que realizo la accion (opcional para eventos anonimos como login fallido)
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'Usuario es requerido'],
+      required: false,
       index: true
+    },
+
+    // NO REPUDIO - Username intentado (para logins fallidos sin usuario valido)
+    attemptedUsername: {
+      type: String,
+      trim: true
     },
 
     // NO REPUDIO - Acción realizada
@@ -32,15 +38,18 @@ const AuditLogSchema = new mongoose.Schema(
         'ticket_created',
         'ticket_updated',
         'ticket_priority_changed',
-        'ticket_escalated',
         'ticket_resolved',
         'ticket_closed',
         'ticket_assigned',
         'ticket_reassigned',
         'comment_added',
+        'ticket_commented',
         'attachment_uploaded',
         'permission_denied',
-        'access_unauthorized'
+        'access_unauthorized',
+        'user_role_changed',
+        'user_activated',
+        'user_deactivated'
       ],
       index: true
     },

@@ -13,6 +13,7 @@ import Dashboard from './components/Dashboard';
 import CreateTicket from './components/CreateTicket';
 import TicketDetail from './components/TicketDetail';
 import AuditLogs from './components/AuditLogs';
+import UserManagement from './components/UserManagement';
 
 /**
  * Componente de Ruta Protegida
@@ -34,6 +35,23 @@ const AdminRoute = ({ children }) => {
   }
 
   if (!['administrador', 'supervisor'].includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
+};
+
+/**
+ * Componente de Ruta Solo Admin
+ */
+const AdminOnlyRoute = ({ children }) => {
+  const user = getStoredUser();
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.role !== 'administrador') {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -83,6 +101,16 @@ function App() {
             <AdminRoute>
               <AuditLogs />
             </AdminRoute>
+          }
+        />
+
+        {/* Ruta solo admin */}
+        <Route
+          path="/users"
+          element={
+            <AdminOnlyRoute>
+              <UserManagement />
+            </AdminOnlyRoute>
           }
         />
 

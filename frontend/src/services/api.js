@@ -107,14 +107,14 @@ export const ticketAPI = {
   updateTicket: (id, data) =>
     api.put(`/tickets/${id}`, data),
 
-  escalateTicket: (id, reason) =>
-    api.post(`/tickets/${id}/escalate`, { reason }),
-
   addComment: (id, text) =>
     api.post(`/tickets/${id}/comments`, { text }),
 
   getHistory: (id) =>
-    api.get(`/tickets/${id}/history`)
+    api.get(`/tickets/${id}/history`),
+
+  getAssignableUsers: () =>
+    api.get('/tickets/assignable-users')
 };
 
 /**
@@ -129,6 +129,23 @@ export const auditAPI = {
 
   getLog: (id) =>
     api.get(`/audit-logs/${id}`)
+};
+
+/**
+ * CONTROL DE ACCESO - Funciones de administración de usuarios
+ */
+export const userAPI = {
+  listUsers: (params = {}) =>
+    api.get('/users', { params }),
+
+  getUser: (id) =>
+    api.get(`/users/${id}`),
+
+  updateRole: (id, role) =>
+    api.put(`/users/${id}/role`, { role }),
+
+  updateStatus: (id, isActive) =>
+    api.put(`/users/${id}/status`, { isActive })
 };
 
 /**

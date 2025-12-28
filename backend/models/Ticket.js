@@ -66,7 +66,7 @@ const TicketSchema = new mongoose.Schema(
     // ESTADO - Estado actual del ticket
     status: {
       type: String,
-      enum: ['abierto', 'en_proceso', 'escalado', 'resuelto', 'cerrado'],
+      enum: ['abierto', 'en_proceso', 'resuelto', 'cerrado'],
       required: true,
       default: 'abierto',
       index: true
@@ -97,7 +97,7 @@ const TicketSchema = new mongoose.Schema(
       {
         action: {
           type: String,
-          enum: ['create', 'update', 'escalate', 'resolve', 'close', 'assign', 'reassign']
+          enum: ['create', 'update', 'resolve', 'close', 'assign', 'reassign', 'comment']
         },
         field: String, // qué campo cambió
         oldValue: mongoose.Schema.Types.Mixed,

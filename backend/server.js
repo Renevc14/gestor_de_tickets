@@ -15,6 +15,7 @@ const { connectDB, healthCheck } = require('./config/database');
 const authRoutes = require('./routes/auth');
 const ticketRoutes = require('./routes/tickets');
 const auditRoutes = require('./routes/audit');
+const userRoutes = require('./routes/users');
 
 // Inicializar aplicación
 const app = express();
@@ -130,6 +131,7 @@ app.get('/debug/db-status', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/audit-logs', auditRoutes);
+app.use('/api/users', userRoutes);
 
 /**
  * Ruta raíz

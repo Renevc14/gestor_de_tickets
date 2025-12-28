@@ -11,7 +11,6 @@ const {
   logTicketCreated,
   logTicketUpdated,
   logPriorityChanged,
-  logTicketEscalated,
   logAttachmentUploaded
 } = require('../helpers/audit');
 const { calculateChecksum } = require('../config/security');
@@ -209,6 +208,13 @@ const updateTicket = async (req, res) => {
     const { id } = req.params;
     const { title, description, priority, status, assignedTo } = req.body;
 
+    console.log('[updateTicket] Request:', {
+      ticketId: id,
+      userId: req.user._id,
+      userRole: req.user.role,
+      assignedTo: assignedTo
+    });
+
     // Buscar ticket
     const ticket = await Ticket.findById(id);
 
@@ -220,14 +226,34 @@ const updateTicket = async (req, res) => {
     }
 
     // CONFIDENCIALIDAD - Verificar acceso
-    if (!canAccessTicket(ticket, req.user, 'update_assigned') &&
-        req.user.role !== 'administrador' &&
-        req.user.role !== 'supervisor') {
+    // Clientes no pueden actualizar tickets
+    if (req.user.role === 'cliente') {
       return res.status(403).json({
         success: false,
         message: 'No tiene permiso para actualizar este ticket'
       });
     }
+
+    // Agentes deben tener acceso al ticket (asignado o creado por ellos)
+    if (['agente_n1', 'agente_n2'].includes(req.user.role)) {
+      const isAssigned = ticket.assignedTo?.toString() === req.user._id.toString();
+      const isCreator = ticket.createdBy?.toString() === req.user._id.toString();
+      console.log('[updateTicket] Agent access check:', {
+        ticketAssignedTo: ticket.assignedTo?.toString(),
+        ticketCreatedBy: ticket.createdBy?.toString(),
+        currentUserId: req.user._id.toString(),
+        isAssigned,
+        isCreator
+      });
+      if (!isAssigned && !isCreator) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tiene permiso para actualizar este ticket'
+        });
+      }
+    }
+
+    console.log('[updateTicket] Access granted, proceeding with update');
 
     const changes = {};
 
@@ -273,11 +299,17 @@ const updateTicket = async (req, res) => {
       }
     }
 
-    if (assignedTo && assignedTo !== ticket.assignedTo?.toString()) {
-      const oldAssigned = ticket.assignedTo;
-      ticket.assignedTo = assignedTo;
-      changes.assignedTo = { old: oldAssigned, new: assignedTo };
-      ticket.addHistory('reassign', 'assignedTo', oldAssigned, assignedTo, req.user._id, req.connection.remoteAddress);
+    // Manejar reasignación (incluyendo quitar asignación con valor vacío)
+    if (assignedTo !== undefined) {
+      const currentAssignedId = ticket.assignedTo?.toString() || '';
+      const newAssignedId = assignedTo || '';
+
+      if (newAssignedId !== currentAssignedId) {
+        const oldAssigned = ticket.assignedTo;
+        ticket.assignedTo = assignedTo || null;
+        changes.assignedTo = { old: oldAssigned, new: assignedTo || null };
+        ticket.addHistory('reassign', 'assignedTo', oldAssigned?.toString() || 'Sin asignar', assignedTo || 'Sin asignar', req.user._id, req.connection.remoteAddress);
+      }
     }
 
     // Guardar cambios
@@ -301,65 +333,6 @@ const updateTicket = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error actualizando ticket'
-    });
-  }
-};
-
-/**
- * INTEGRIDAD - Escalar ticket (solo agente_n2)
- * POST /api/tickets/:id/escalate
- */
-const escalateTicket = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { reason } = req.body;
-
-    // Verificar que sea agente_n2 o superior
-    if (!['agente_n2', 'supervisor', 'administrador'].includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Solo agentes N2 pueden escalar tickets'
-      });
-    }
-
-    const ticket = await Ticket.findById(id);
-
-    if (!ticket) {
-      return res.status(404).json({
-        success: false,
-        message: 'Ticket no encontrado'
-      });
-    }
-
-    if (ticket.status === 'escalado') {
-      return res.status(400).json({
-        success: false,
-        message: 'El ticket ya está escalado'
-      });
-    }
-
-    // Actualizar estado
-    const oldStatus = ticket.status;
-    ticket.status = 'escalado';
-    ticket.addHistory('escalate', 'status', oldStatus, 'escalado', req.user._id, req.connection.remoteAddress);
-
-    await ticket.save();
-
-    // NO REPUDIO - Registrar escalamiento
-    await logTicketEscalated(req.user._id, ticket._id, reason || 'Sin razón especificada', req);
-
-    await ticket.populate(['createdBy', 'assignedTo']);
-
-    res.status(200).json({
-      success: true,
-      message: 'Ticket escalado exitosamente',
-      ticket
-    });
-  } catch (error) {
-    console.error('Error escalando ticket:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error escalando ticket'
     });
   }
 };
@@ -390,6 +363,14 @@ const addComment = async (req, res) => {
     }
 
     // CONFIDENCIALIDAD - Verificar acceso
+    console.log('[addComment] Debug:', {
+      ticketId: ticket._id,
+      ticketAssignedTo: ticket.assignedTo?.toString(),
+      userId: req.user._id?.toString(),
+      userRole: req.user.role,
+      canAccess: canAccessTicket(ticket, req.user, 'add_comments')
+    });
+
     if (!canAccessTicket(ticket, req.user, 'add_comments') &&
         req.user.role !== 'administrador' &&
         req.user.role !== 'supervisor') {
@@ -482,12 +463,47 @@ const getHistory = async (req, res) => {
   }
 };
 
+/**
+ * CONTROL DE ACCESO - Listar usuarios asignables
+ * GET /api/tickets/assignable-users
+ */
+const getAssignableUsers = async (req, res) => {
+  try {
+    // Todos pueden ver usuarios asignables excepto clientes
+    if (req.user.role === 'cliente') {
+      return res.status(403).json({
+        success: false,
+        message: 'No tiene permiso para ver usuarios asignables'
+      });
+    }
+
+    // Obtener usuarios que pueden recibir tickets (agentes, supervisores, admins)
+    const assignableRoles = ['agente_n1', 'agente_n2', 'supervisor', 'administrador'];
+
+    const users = await User.find({
+      role: { $in: assignableRoles },
+      isActive: true
+    }).select('_id username email role');
+
+    res.status(200).json({
+      success: true,
+      users
+    });
+  } catch (error) {
+    console.error('Error obteniendo usuarios asignables:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error obteniendo usuarios asignables'
+    });
+  }
+};
+
 module.exports = {
   createTicket,
   listTickets,
   getTicket,
   updateTicket,
-  escalateTicket,
   addComment,
-  getHistory
+  getHistory,
+  getAssignableUsers
 };

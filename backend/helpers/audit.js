@@ -5,15 +5,16 @@
 const AuditLog = require('../models/AuditLog');
 
 /**
- * NO REPUDIO - Registrar evento en log de auditoría
- * @param {ObjectId} userId - ID del usuario
- * @param {string} action - Acción realizada
+ * NO REPUDIO - Registrar evento en log de auditoria
+ * @param {ObjectId} userId - ID del usuario (opcional para eventos anonimos)
+ * @param {string} action - Accion realizada
  * @param {string} resource - Tipo de recurso (ticket, user, system)
  * @param {ObjectId} resourceId - ID del recurso (opcional)
  * @param {Object} details - Detalles adicionales
  * @param {Object} req - Objeto request para extraer IP y User-Agent
- * @param {Boolean} success - Si la acción fue exitosa
+ * @param {Boolean} success - Si la accion fue exitosa
  * @param {string} errorMessage - Mensaje de error si aplica
+ * @param {string} attemptedUsername - Username intentado (para logins fallidos)
  */
 async function logAuditEvent(
   userId,
@@ -23,20 +24,21 @@ async function logAuditEvent(
   details = {},
   req,
   success = true,
-  errorMessage = null
+  errorMessage = null,
+  attemptedUsername = null
 ) {
   try {
     // Extraer IP del request
     const ipAddress =
-      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-      req.connection.remoteAddress ||
+      req?.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ||
+      req?.connection?.remoteAddress ||
+      req?.ip ||
       'unknown';
 
-    const userAgent = req.headers['user-agent'] || 'unknown';
+    const userAgent = req?.headers?.['user-agent'] || 'unknown';
 
-    // Crear registro de auditoría
-    const auditLog = new AuditLog({
-      user: userId,
+    // Crear registro de auditoria
+    const auditLogData = {
       action,
       resource,
       resourceId,
@@ -46,14 +48,26 @@ async function logAuditEvent(
       timestamp: new Date(),
       success,
       errorMessage
-    });
+    };
+
+    // Solo agregar user si existe
+    if (userId) {
+      auditLogData.user = userId;
+    }
+
+    // Agregar username intentado para eventos sin usuario valido
+    if (attemptedUsername) {
+      auditLogData.attemptedUsername = attemptedUsername;
+    }
+
+    const auditLog = new AuditLog(auditLogData);
 
     // Guardar en base de datos
     await auditLog.save();
 
     return auditLog;
   } catch (error) {
-    console.error('Error registrando evento de auditoría:', error);
+    console.error('Error registrando evento de auditoria:', error);
     // No lanzar error para no interrumpir el flujo principal
     return null;
   }
@@ -79,14 +93,15 @@ async function logLoginSuccess(userId, req) {
  */
 async function logLoginFailed(username, reason, req) {
   return logAuditEvent(
-    null, // No hay usuario aún
+    null, // No hay usuario valido
     'login_failed',
     'user',
     null,
-    { username, reason },
+    { reason },
     req,
     false,
-    reason
+    reason,
+    username // Guardar username intentado
   );
 }
 

@@ -1,18 +1,21 @@
-# Backend
-backend/node_modules/
-backend/.env
-backend/.env.local
-backend/.env.*.local
-backend/uploads/
-backend/dist/
-backend/build/
-.claude/
-# Frontend
-frontend/node_modules/
-frontend/.env.local
-frontend/.env.*.local
-frontend/build/
-frontend/dist/
+# Dependencias - IGNORAR TODOS LOS NODE_MODULES
+node_modules/
+**/node_modules/
+
+# Variables de entorno (contienen secretos)
+.env
+**/.env
+*.env.local
+**/*.env.local
+
+# Build
+build/
+dist/
+**/build/
+**/dist/
+
+# Uploads
+uploads/
 
 # IDE
 .vscode/
@@ -23,13 +26,20 @@ frontend/dist/
 .DS_Store
 .project
 .classpath
-*.log
 
-# Dependencias
-package-lock.json
-yarn.lock
+# Logs
+*.log
+logs/
 
 # Temporal
 *.tmp
 *.bak
 .cache/
+
+# Scripts auxiliares
+convertToDocx.js
+convertToWord.js
+EF-Documento-Entrega.html
+
+# Claude
+.claude/
