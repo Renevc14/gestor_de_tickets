@@ -51,7 +51,7 @@ cp .env.example .env
 Editar `.env` con tus valores:
 
 ```env
-MONGODB_URI=mongodb+srv://renevc:mongodatabase@cluster0.wiyvclx.mongodb.net/?appName=Cluster0
+MONGODB_URI=mongodb+srv://username:password@cluster0.wiyvclx.mongodb.net/?appName=Cluster0
 JWT_SECRET=<generar-64-caracteres-aleatorios>
 REFRESH_TOKEN_SECRET=<generar-64-caracteres-aleatorios>
 ENCRYPTION_KEY=<generar-64-caracteres-hex>
