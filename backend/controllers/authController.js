@@ -1,285 +1,227 @@
 /**
- * AUTENTICACIÓN - Controlador de Autenticación
- * Maneja registro, login, MFA y gestión de sesiones
+ * AUTENTICACIÓN — Controlador de Autenticación
+ * Monografía UCB: login por email, JWT + MFA opcional
  */
 
-const User = require('../models/User');
+const bcrypt = require('bcrypt');
+const prisma = require('../config/database');
 const { generateToken, generateRefreshToken } = require('../middleware/auth');
 const { generateMFASecret, verifyTOTP } = require('../middleware/mfa');
-const { validatePassword, sanitizeInput, validateRequiredFields } = require('../helpers/validation');
 const {
   logLoginSuccess,
   logLoginFailed,
   logAccountLocked,
   logPasswordChanged,
-  logMFAEnabled
+  logMFAEnabled,
+  logAuditEvent
 } = require('../helpers/audit');
 const { securityConfig } = require('../config/security');
 
+// ─── helpers internos ──────────────────────────────────────────────────────
+
+function isLocked(user) {
+  return user.lock_until && user.lock_until > new Date();
+}
+
+async function incrementAttempts(userId) {
+  const maxAttempts = securityConfig.accountLockout.maxLoginAttempts;
+  const lockDuration = securityConfig.accountLockout.lockoutDuration;
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      login_attempts: { increment: 1 }
+    }
+  });
+
+  if (updated.login_attempts >= maxAttempts) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lock_until: new Date(Date.now() + lockDuration) }
+    });
+  }
+}
+
+async function resetAttempts(userId) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { login_attempts: 0, lock_until: null, last_login: new Date() }
+  });
+}
+
+// ─── Controladores ─────────────────────────────────────────────────────────
+
 /**
- * AUTENTICACIÓN - Registrar nuevo usuario
  * POST /api/auth/register
+ * Registro de nuevo usuario (rol SOLICITANTE por defecto)
  */
 const register = async (req, res) => {
   try {
-    const { username, email, password, confirmPassword } = req.body;
+    const { name, email, password } = req.body;
 
-    // INTEGRIDAD - Validar campos requeridos
-    const validation = validateRequiredFields(req.body, ['username', 'email', 'password', 'confirmPassword']);
-    if (!validation.isValid) {
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: 'name, email y password son requeridos' });
+    }
+
+    // Política de contraseña
+    const { validatePassword } = require('../helpers/validation');
+    const pwValidation = validatePassword(password);
+    if (!pwValidation.isValid) {
       return res.status(400).json({
         success: false,
-        message: validation.message,
-        missingFields: validation.missingFields
+        message: 'La contraseña no cumple los requisitos',
+        errors: pwValidation.errors
       });
     }
 
-    // INTEGRIDAD - Validar que las contraseñas coincidan
-    if (password !== confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Las contraseñas no coinciden'
-      });
+    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (existing) {
+      return res.status(409).json({ success: false, message: 'El email ya está registrado' });
     }
 
-    // INTEGRIDAD - Validar política de contraseña
-    const passwordValidation = validatePassword(password);
-    if (!passwordValidation.isValid) {
-      return res.status(400).json({
-        success: false,
-        message: 'La contraseña no cumple con los requisitos',
-        requirements: passwordValidation.requirements,
-        errors: passwordValidation.errors
-      });
-    }
+    const hashedPassword = await bcrypt.hash(password, securityConfig.encryption.saltRounds);
 
-    // INTEGRIDAD - Sanitizar entrada
-    const sanitizedUsername = sanitizeInput(username);
-    const sanitizedEmail = sanitizeInput(email);
-
-    // CONFIDENCIALIDAD - Verificar si usuario ya existe
-    const existingUser = await User.findOne({
-      $or: [{ username: sanitizedUsername }, { email: sanitizedEmail }]
+    const user = await prisma.user.create({
+      data: {
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
+        password: hashedPassword,
+        role: 'SOLICITANTE',
+        status: 'ACTIVO',
+        password_history: JSON.stringify([hashedPassword])
+      },
+      select: { id: true, name: true, email: true, role: true, status: true, created_at: true }
     });
 
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        message: 'Usuario o email ya existe'
-      });
-    }
+    await logAuditEvent(user.id, 'register_user', 'user', user.id, { email: user.email }, req, true);
 
-    // AUTENTICACIÓN - Crear usuario
-    const user = new User({
-      username: sanitizedUsername,
-      email: sanitizedEmail,
-      password,
-      role: 'cliente' // Por defecto, nuevo usuario es cliente
-    });
-
-    await user.save();
-
-    // NO REPUDIO - Registrar registro de usuario
-    const { logAuditEvent } = require('../helpers/audit');
-    await logAuditEvent(
-      user._id,
-      'register_user',
-      'user',
-      user._id,
-      { username: sanitizedUsername },
-      req,
-      true
-    );
-
-    res.status(201).json({
-      success: true,
-      message: 'Usuario registrado exitosamente',
-      user: user.toJSON()
-    });
+    res.status(201).json({ success: true, message: 'Usuario registrado exitosamente', user });
   } catch (error) {
     console.error('Error en registro:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el registro'
-    });
+    res.status(500).json({ success: false, message: 'Error en el registro' });
   }
 };
 
 /**
- * AUTENTICACIÓN - Login con soporte para MFA
  * POST /api/auth/login
  */
 const login = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { email, password } = req.body;
 
-    // INTEGRIDAD - Validar campos requeridos
-    const validation = validateRequiredFields(req.body, ['username', 'password']);
-    if (!validation.isValid) {
-      return res.status(400).json({
-        success: false,
-        message: validation.message
-      });
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'email y password son requeridos' });
     }
 
-    // Buscar usuario
-    const user = await User.findOne({ username }).select('+password +mfaSecret');
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
 
     if (!user) {
-      // NO REPUDIO - Registrar login fallido
-      await logLoginFailed(username, 'Usuario no encontrado', req);
-
-      return res.status(401).json({
-        success: false,
-        message: 'Usuario o contraseña incorrectos'
-      });
+      await logLoginFailed(email, 'Usuario no encontrado', req);
+      return res.status(401).json({ success: false, message: 'Email o contraseña incorrectos' });
     }
 
-    // AUTENTICACIÓN - Verificar si cuenta está bloqueada
-    if (user.isLocked) {
-      // NO REPUDIO - Registrar intento en cuenta bloqueada
-      await logAccountLocked(user._id, req);
-
-      return res.status(403).json({
-        success: false,
-        message: 'Cuenta bloqueada por demasiados intentos fallidos. Intente más tarde.'
-      });
+    if (user.status !== 'ACTIVO') {
+      return res.status(403).json({ success: false, message: 'Cuenta inactiva. Contacte al administrador.' });
     }
 
-    // AUTENTICACIÓN - Verificar contraseña
-    const isPasswordValid = await user.comparePassword(password);
+    if (isLocked(user)) {
+      await logAccountLocked(user.id, req);
+      return res.status(403).json({ success: false, message: 'Cuenta bloqueada por demasiados intentos fallidos. Intente más tarde.' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
-      // AUTENTICACIÓN - Incrementar intentos fallidos
-      await user.incLoginAttempts();
-
-      // NO REPUDIO - Registrar login fallido
-      await logLoginFailed(username, 'Contraseña incorrecta', req);
-
-      return res.status(401).json({
-        success: false,
-        message: 'Usuario o contraseña incorrectos'
-      });
+      await incrementAttempts(user.id);
+      await logLoginFailed(email, 'Contraseña incorrecta', req);
+      return res.status(401).json({ success: false, message: 'Email o contraseña incorrectos' });
     }
 
-    // AUTENTICACIÓN - Contraseña correcta, resetear intentos
-    await user.resetLoginAttempts();
+    await resetAttempts(user.id);
 
-    // AUTENTICACIÓN - Si MFA está habilitado, requerir código
-    if (user.mfaEnabled) {
+    // MFA requerido
+    if (user.mfa_enabled) {
       return res.status(200).json({
         success: true,
         message: 'Ingrese código MFA',
         mfaRequired: true,
-        userId: user._id
+        userId: user.id
       });
     }
 
-    // AUTENTICACIÓN - Generar tokens
-    const token = generateToken(user._id, user.username, user.role);
-    const refreshToken = generateRefreshToken(user._id);
+    const token = generateToken(user.id, user.name, user.role);
+    const refreshToken = generateRefreshToken(user.id);
 
-    // Actualizar último login
-    user.lastLogin = new Date();
-    await user.save();
-
-    // NO REPUDIO - Registrar login exitoso
-    await logLoginSuccess(user._id, req);
+    await logLoginSuccess(user.id, req);
 
     res.status(200).json({
       success: true,
       message: 'Login exitoso',
       token,
       refreshToken,
-      user: user.toJSON()
+      user: { id: user.id, name: user.name, email: user.email, role: user.role }
     });
   } catch (error) {
     console.error('Error en login:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el login'
-    });
+    res.status(500).json({ success: false, message: 'Error en el login' });
   }
 };
 
 /**
- * AUTENTICACIÓN - Verificar código MFA durante login
  * POST /api/auth/login-mfa
  */
 const verifyLoginMFA = async (req, res) => {
   try {
     const { userId, mfaCode } = req.body;
 
-    // Validar campos
     if (!userId || !mfaCode) {
-      return res.status(400).json({
-        success: false,
-        message: 'userId y mfaCode son requeridos'
-      });
+      return res.status(400).json({ success: false, message: 'userId y mfaCode son requeridos' });
     }
 
-    // Buscar usuario
-    const user = await User.findById(userId).select('+mfaSecret');
+    const user = await prisma.user.findUnique({ where: { id: parseInt(userId) } });
 
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Usuario no encontrado'
-      });
+      return res.status(401).json({ success: false, message: 'Usuario no encontrado' });
     }
 
-    // AUTENTICACIÓN - Verificar TOTP
-    const isValidMFA = verifyTOTP(user.mfaSecret, mfaCode);
+    const isValidMFA = verifyTOTP(user.mfa_secret, mfaCode);
 
     if (!isValidMFA) {
-      return res.status(403).json({
-        success: false,
-        message: 'Código MFA inválido o expirado'
-      });
+      await logAuditEvent(user.id, 'mfa_login_failed', 'user', user.id, {}, req, false, 'Codigo MFA invalido');
+      return res.status(403).json({ success: false, message: 'Código MFA inválido o expirado' });
     }
 
-    // AUTENTICACIÓN - Generar tokens
-    const token = generateToken(user._id, user.username, user.role);
-    const refreshToken = generateRefreshToken(user._id);
+    await resetAttempts(user.id);
 
-    // Actualizar último login
-    user.lastLogin = new Date();
-    await user.save();
+    const token = generateToken(user.id, user.name, user.role);
+    const refreshToken = generateRefreshToken(user.id);
 
-    // NO REPUDIO - Registrar login exitoso
-    await logLoginSuccess(user._id, req);
+    await logLoginSuccess(user.id, req);
 
     res.status(200).json({
       success: true,
       message: 'MFA verificado exitosamente',
       token,
       refreshToken,
-      user: user.toJSON()
+      user: { id: user.id, name: user.name, email: user.email, role: user.role }
     });
   } catch (error) {
     console.error('Error en MFA login:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error verificando MFA'
-    });
+    res.status(500).json({ success: false, message: 'Error verificando MFA' });
   }
 };
 
 /**
- * AUTENTICACIÓN - Configurar MFA (generar QR)
  * POST /api/auth/setup-mfa
  */
 const setupMFA = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const mfaData = await generateMFASecret(req.user.email);
 
-    // Generar secreto MFA
-    const mfaData = await generateMFASecret(req.user.username);
-
-    // Guardar secreto temporalmente (sin activar aún)
-    const user = await User.findById(userId);
-    user.mfaSecret = mfaData.secret;
-    await user.save();
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { mfa_secret: mfaData.secret }
+    });
 
     res.status(200).json({
       success: true,
@@ -289,158 +231,163 @@ const setupMFA = async (req, res) => {
     });
   } catch (error) {
     console.error('Error setup MFA:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error configurando MFA'
-    });
+    res.status(500).json({ success: false, message: 'Error configurando MFA' });
   }
 };
 
 /**
- * AUTENTICACIÓN - Verificar y activar MFA
  * POST /api/auth/verify-mfa
  */
 const verifyMFA = async (req, res) => {
   try {
-    const userId = req.user._id;
     const { mfaCode } = req.body;
 
     if (!mfaCode) {
-      return res.status(400).json({
-        success: false,
-        message: 'Código MFA es requerido'
-      });
+      return res.status(400).json({ success: false, message: 'Código MFA es requerido' });
     }
 
-    // Buscar usuario
-    const user = await User.findById(userId).select('+mfaSecret');
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
 
-    if (!user.mfaSecret) {
-      return res.status(400).json({
-        success: false,
-        message: 'Primero debe generar el QR code'
-      });
+    if (!user.mfa_secret) {
+      return res.status(400).json({ success: false, message: 'Primero debe generar el QR code' });
     }
 
-    // AUTENTICACIÓN - Verificar código
-    const isValid = verifyTOTP(user.mfaSecret, mfaCode);
+    const isValid = verifyTOTP(user.mfa_secret, mfaCode);
 
     if (!isValid) {
-      return res.status(403).json({
-        success: false,
-        message: 'Código MFA inválido'
-      });
+      return res.status(403).json({ success: false, message: 'Código MFA inválido' });
     }
 
-    // AUTENTICACIÓN - Activar MFA
-    user.mfaEnabled = true;
-    await user.save();
-
-    // NO REPUDIO - Registrar MFA habilitado
-    await logMFAEnabled(userId, req);
-
-    res.status(200).json({
-      success: true,
-      message: 'MFA habilitado exitosamente',
-      mfaEnabled: true
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { mfa_enabled: true }
     });
+
+    await logMFAEnabled(req.user.id, req);
+
+    res.status(200).json({ success: true, message: 'MFA habilitado exitosamente', mfaEnabled: true });
   } catch (error) {
     console.error('Error verificando MFA:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error activando MFA'
-    });
+    res.status(500).json({ success: false, message: 'Error activando MFA' });
   }
 };
 
 /**
- * AUTENTICACIÓN - Deshabilitar MFA
  * POST /api/auth/disable-mfa
  */
 const disableMFA = async (req, res) => {
   try {
-    const userId = req.user._id;
     const { password } = req.body;
 
     if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Contraseña es requerida'
-      });
+      return res.status(400).json({ success: false, message: 'Contraseña es requerida' });
     }
 
-    // Verificar contraseña
-    const user = await User.findById(userId).select('+password');
-    const isValidPassword = await user.comparePassword(password);
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const isValid = await bcrypt.compare(password, user.password);
 
-    if (!isValidPassword) {
-      return res.status(401).json({
-        success: false,
-        message: 'Contraseña incorrecta'
-      });
+    if (!isValid) {
+      return res.status(401).json({ success: false, message: 'Contraseña incorrecta' });
     }
 
-    // Deshabilitar MFA
-    user.mfaEnabled = false;
-    user.mfaSecret = undefined;
-    await user.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'MFA deshabilitado'
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { mfa_enabled: false, mfa_secret: null }
     });
+
+    await logAuditEvent(req.user.id, 'mfa_disabled', 'user', req.user.id, {}, req, true);
+
+    res.status(200).json({ success: true, message: 'MFA deshabilitado' });
   } catch (error) {
     console.error('Error deshabilitando MFA:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error deshabilitando MFA'
-    });
+    res.status(500).json({ success: false, message: 'Error deshabilitando MFA' });
   }
 };
 
 /**
- * AUTENTICACIÓN - Refresh token
  * POST /api/auth/refresh
  */
 const refreshToken = async (req, res) => {
   try {
     const user = req.user;
+    const token = generateToken(user.id, user.name, user.role);
+    const newRefreshToken = generateRefreshToken(user.id);
 
-    // Generar nuevo token
-    const token = generateToken(user._id, user.username, user.role);
-    const newRefreshToken = generateRefreshToken(user._id);
-
-    res.status(200).json({
-      success: true,
-      message: 'Token refrescado',
-      token,
-      refreshToken: newRefreshToken
-    });
+    res.status(200).json({ success: true, token, refreshToken: newRefreshToken });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error refrescando token'
-    });
+    res.status(500).json({ success: false, message: 'Error refrescando token' });
   }
 };
 
 /**
- * AUTENTICACIÓN - Obtener perfil del usuario actual
  * GET /api/auth/profile
  */
 const getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true, name: true, email: true, role: true, status: true,
+        mfa_enabled: true, last_login: true, created_at: true
+      }
+    });
 
-    res.status(200).json({
-      success: true,
-      user: user.toJSON()
-    });
+    res.status(200).json({ success: true, user });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error obteniendo perfil'
+    res.status(500).json({ success: false, message: 'Error obteniendo perfil' });
+  }
+};
+
+/**
+ * PATCH /api/auth/change-password
+ */
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'currentPassword y newPassword son requeridos' });
+    }
+
+    const { validatePassword } = require('../helpers/validation');
+    const pwValidation = validatePassword(newPassword);
+    if (!pwValidation.isValid) {
+      return res.status(400).json({ success: false, message: 'La contraseña no cumple los requisitos', errors: pwValidation.errors });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const isValid = await bcrypt.compare(currentPassword, user.password);
+
+    if (!isValid) {
+      return res.status(401).json({ success: false, message: 'Contraseña actual incorrecta' });
+    }
+
+    // Verificar historial de contraseñas
+    const history = Array.isArray(user.password_history) ? user.password_history : JSON.parse(user.password_history || '[]');
+    for (const oldHash of history) {
+      if (await bcrypt.compare(newPassword, oldHash)) {
+        return res.status(400).json({ success: false, message: 'No puede reutilizar contraseñas recientes' });
+      }
+    }
+
+    const newHash = await bcrypt.hash(newPassword, securityConfig.encryption.saltRounds);
+    const updatedHistory = [newHash, ...history].slice(0, securityConfig.passwordPolicy.historyCount);
+
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: {
+        password: newHash,
+        password_history: JSON.stringify(updatedHistory),
+        last_password_change: new Date()
+      }
     });
+
+    await logPasswordChanged(req.user.id, req);
+
+    res.status(200).json({ success: true, message: 'Contraseña actualizada exitosamente' });
+  } catch (error) {
+    console.error('Error cambiando contraseña:', error);
+    res.status(500).json({ success: false, message: 'Error cambiando contraseña' });
   }
 };
 
@@ -452,5 +399,6 @@ module.exports = {
   verifyMFA,
   disableMFA,
   refreshToken,
-  getProfile
+  getProfile,
+  changePassword
 };

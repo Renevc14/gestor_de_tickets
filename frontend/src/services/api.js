@@ -1,70 +1,47 @@
 /**
- * API Service - Capa de comunicación con el backend
- * Maneja autenticación, tokens y MFA
+ * API Service — Capa de comunicación con el backend
+ * Monografía UCB: auth, tickets, users, categories, reports, audit
  */
 
 import axios from 'axios';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-// Crear instancia de axios
 const api = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json'
-  }
+  headers: { 'Content-Type': 'application/json' }
 });
 
-/**
- * AUTENTICACIÓN - Interceptor para agregar token a todas las requests
- */
+// ─── Interceptor: agregar token JWT ─────────────────────────────────────────
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    const mfaToken = localStorage.getItem('mfaToken');
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-
-    if (mfaToken) {
-      config.headers['X-MFA-Token'] = mfaToken;
-    }
-
+    if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-/**
- * AUTENTICACIÓN - Interceptor para manejar respuestas
- */
+// ─── Interceptor: manejar 401 ────────────────────────────────────────────────
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Si token expirado, limpiar localStorage
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
-      // Redirigir a login sería aquí
     }
-
     return Promise.reject(error);
   }
 );
 
-/**
- * AUTENTICACIÓN - Funciones de registro
- */
+// ─── Auth ────────────────────────────────────────────────────────────────────
 export const authAPI = {
-  register: (username, email, password, confirmPassword) =>
-    api.post('/auth/register', { username, email, password, confirmPassword }),
+  register: (name, email, password) =>
+    api.post('/auth/register', { name, email, password }),
 
-  login: (username, password) =>
-    api.post('/auth/login', { username, password }),
+  login: (email, password) =>
+    api.post('/auth/login', { email, password }),
 
   verifyLoginMFA: (userId, mfaCode) =>
     api.post('/auth/login-mfa', { userId, mfaCode }),
@@ -75,28 +52,18 @@ export const authAPI = {
   refreshToken: (refreshToken) =>
     api.post('/auth/refresh', { refreshToken }),
 
-  setupMFA: () =>
-    api.post('/auth/setup-mfa'),
+  changePassword: (currentPassword, newPassword) =>
+    api.patch('/auth/change-password', { currentPassword, newPassword }),
 
-  verifyMFA: (mfaCode) =>
-    api.post('/auth/verify-mfa', { mfaCode }),
-
-  disableMFA: (password) =>
-    api.post('/auth/disable-mfa', { password })
+  setupMFA: () => api.post('/auth/setup-mfa'),
+  verifyMFA: (mfaCode) => api.post('/auth/verify-mfa', { mfaCode }),
+  disableMFA: (password) => api.post('/auth/disable-mfa', { password })
 };
 
-/**
- * INTEGRIDAD - Funciones de tickets
- */
+// ─── Tickets ─────────────────────────────────────────────────────────────────
 export const ticketAPI = {
-  createTicket: (title, description, category, priority, confidentiality) =>
-    api.post('/tickets', {
-      title,
-      description,
-      category,
-      priority,
-      confidentiality
-    }),
+  createTicket: (data) =>
+    api.post('/tickets', data),
 
   listTickets: (params = {}) =>
     api.get('/tickets', { params }),
@@ -105,21 +72,87 @@ export const ticketAPI = {
     api.get(`/tickets/${id}`),
 
   updateTicket: (id, data) =>
-    api.put(`/tickets/${id}`, data),
+    api.patch(`/tickets/${id}`, data),
 
-  escalateTicket: (id, reason) =>
-    api.post(`/tickets/${id}/escalate`, { reason }),
+  assignTicket: (id, tech_id) =>
+    api.patch(`/tickets/${id}/assign`, { tech_id }),
 
-  addComment: (id, text) =>
-    api.post(`/tickets/${id}/comments`, { text }),
+  changeStatus: (id, status) =>
+    api.patch(`/tickets/${id}/status`, { status }),
+
+  addComment: (id, content) =>
+    api.post(`/tickets/${id}/comments`, { content }),
 
   getHistory: (id) =>
-    api.get(`/tickets/${id}/history`)
+    api.get(`/tickets/${id}/history`),
+
+  uploadAttachment: (ticketId, formData) =>
+    api.post(`/tickets/${ticketId}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+
+  downloadAttachment: (ticketId, attachmentId) =>
+    api.get(`/tickets/${ticketId}/attachments/${attachmentId}/download`, { responseType: 'blob' }),
+
+  deleteAttachment: (ticketId, attachmentId) =>
+    api.delete(`/tickets/${ticketId}/attachments/${attachmentId}`)
 };
 
-/**
- * NO REPUDIO - Funciones de auditoría
- */
+// ─── Users (solo ADMINISTRADOR) ──────────────────────────────────────────────
+export const userAPI = {
+  listUsers: (params = {}) =>
+    api.get('/users', { params }),
+
+  getUser: (id) =>
+    api.get(`/users/${id}`),
+
+  createUser: (data) =>
+    api.post('/users', data),
+
+  updateUser: (id, data) =>
+    api.patch(`/users/${id}`, data),
+
+  unlockUser: (id) =>
+    api.post(`/users/${id}/unlock`),
+
+  listTechnicians: () =>
+    api.get('/users/technicians')
+};
+
+// ─── Categories ───────────────────────────────────────────────────────────────
+export const categoryAPI = {
+  listCategories: () =>
+    api.get('/categories'),
+
+  getCategory: (id) =>
+    api.get(`/categories/${id}`),
+
+  createCategory: (data) =>
+    api.post('/categories', data),
+
+  updateCategory: (id, data) =>
+    api.patch(`/categories/${id}`, data),
+
+  deleteCategory: (id) =>
+    api.delete(`/categories/${id}`)
+};
+
+// ─── Reports (solo ADMINISTRADOR) ────────────────────────────────────────────
+export const reportAPI = {
+  getDashboard: () =>
+    api.get('/reports/dashboard'),
+
+  getByTech: () =>
+    api.get('/reports/by-tech'),
+
+  getByCategory: () =>
+    api.get('/reports/by-category'),
+
+  getResolutionTime: () =>
+    api.get('/reports/resolution-time')
+};
+
+// ─── Audit Logs (solo ADMINISTRADOR) ─────────────────────────────────────────
 export const auditAPI = {
   listLogs: (params = {}) =>
     api.get('/audit-logs', { params }),
@@ -131,9 +164,7 @@ export const auditAPI = {
     api.get(`/audit-logs/${id}`)
 };
 
-/**
- * Funciones de utilidad
- */
+// ─── Utilidades ──────────────────────────────────────────────────────────────
 export const setToken = (token, refreshToken, user) => {
   localStorage.setItem('token', token);
   localStorage.setItem('refreshToken', refreshToken);
@@ -144,7 +175,6 @@ export const clearAuth = () => {
   localStorage.removeItem('token');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('user');
-  localStorage.removeItem('mfaToken');
 };
 
 export const getStoredUser = () => {

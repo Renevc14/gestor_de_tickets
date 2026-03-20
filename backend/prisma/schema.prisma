@@ -1,0 +1,220 @@
+// ============================================================
+// SCHEMA PRISMA — TicketFlow
+// Monografía UCB: PostgreSQL 15.5 + Prisma 5.7.0
+// 5 tablas principales + 2 extensiones de seguridad
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ──────────────────────────────────────────────────
+
+enum Role {
+  SOLICITANTE
+  TECNICO
+  ADMINISTRADOR
+}
+
+enum UserStatus {
+  ACTIVO
+  INACTIVO
+}
+
+enum Priority {
+  BAJA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum TicketStatus {
+  NUEVO
+  ASIGNADO
+  EN_PROCESO
+  RESUELTO
+  CERRADO
+  REABIERTO
+}
+
+// ─── TABLA: users ───────────────────────────────────────────
+// Monografía: id, name, email, password, role, status, created_at, updated_at
+// + campos de seguridad para la especialización
+
+model User {
+  id         Int        @id @default(autoincrement())
+  name       String     @db.VarChar(100)
+  email      String     @unique @db.VarChar(100)
+  password   String     @db.VarChar(255)
+  role       Role       @default(SOLICITANTE)
+  status     UserStatus @default(ACTIVO)
+
+  // Extensiones de seguridad (especialización)
+  password_history     Json?     @default("[]")
+  login_attempts       Int       @default(0)
+  lock_until           DateTime?
+  last_login           DateTime?
+  last_password_change DateTime  @default(now())
+  mfa_enabled          Boolean   @default(false)
+  mfa_secret           String?   @db.VarChar(255)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relaciones
+  tickets_created  Ticket[]       @relation("TicketCreator")
+  tickets_assigned Ticket[]       @relation("TicketAssignee")
+  comments         Comment[]
+  history          TicketHistory[]
+  audit_logs       AuditLog[]
+  attachments      Attachment[]
+
+  @@index([role])
+  @@index([email])
+  @@index([status])
+  @@map("users")
+}
+
+// ─── TABLA: categories ──────────────────────────────────────
+// Monografía: id, name, color, created_at
+
+model Category {
+  id         Int      @id @default(autoincrement())
+  name       String   @unique @db.VarChar(50)
+  color      String   @db.VarChar(7)  // color hex: #RRGGBB
+  created_at DateTime @default(now())
+
+  tickets Ticket[]
+
+  @@map("categories")
+}
+
+// ─── TABLA: tickets ─────────────────────────────────────────
+// Monografía: id, user_id FK, tech_id FK?, category_id FK,
+//             title, description, priority, status, created_at, updated_at
+// + sla_deadline, resolved_at, closed_at (necesarios para métricas)
+
+model Ticket {
+  id          Int          @id @default(autoincrement())
+  user_id     Int
+  tech_id     Int?
+  category_id Int
+  title       String       @db.VarChar(100)
+  description String       @db.Text
+  priority    Priority     @default(MEDIA)
+  status      TicketStatus @default(NUEVO)
+
+  // SLA y resolución (RF06 — métricas operativas)
+  sla_deadline DateTime?
+  resolved_at  DateTime?
+  closed_at    DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relaciones
+  creator     User          @relation("TicketCreator", fields: [user_id], references: [id])
+  assignee    User?         @relation("TicketAssignee", fields: [tech_id], references: [id])
+  category    Category      @relation(fields: [category_id], references: [id])
+  comments    Comment[]
+  history     TicketHistory[]
+  attachments Attachment[]
+
+  @@index([user_id])
+  @@index([tech_id])
+  @@index([status])
+  @@index([category_id])
+  @@index([created_at])
+  @@index([sla_deadline, status])
+  @@map("tickets")
+}
+
+// ─── TABLA: comments ────────────────────────────────────────
+// Monografía: id, ticket_id FK, user_id FK, content, timestamp
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  ticket_id Int
+  user_id   Int
+  content   String   @db.Text
+  timestamp DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [user_id], references: [id])
+
+  @@index([ticket_id])
+  @@map("comments")
+}
+
+// ─── TABLA: ticket_history ──────────────────────────────────
+// Monografía: id, ticket_id FK, user_id FK, field_changed,
+//             old_value, new_value, timestamp
+// INMUTABLE — registra todos los cambios (RNF03 trazabilidad)
+
+model TicketHistory {
+  id            Int      @id @default(autoincrement())
+  ticket_id     Int
+  user_id       Int
+  field_changed String   @db.VarChar(50)
+  old_value     String?  @db.VarChar(255)
+  new_value     String?  @db.VarChar(255)
+  timestamp     DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [user_id], references: [id])
+
+  @@index([ticket_id])
+  @@index([timestamp])
+  @@map("ticket_history")
+}
+
+// ─── TABLA: attachments (extensión) ─────────────────────────
+// Archivos adjuntos a tickets con verificación de integridad
+
+model Attachment {
+  id          Int      @id @default(autoincrement())
+  ticket_id   Int
+  filename    String   @db.VarChar(255)
+  path        String   @db.VarChar(500)
+  mimetype    String   @db.VarChar(100)
+  size        Int
+  checksum    String   @db.VarChar(64)  // SHA-256
+  uploaded_by Int
+  uploaded_at DateTime @default(now())
+
+  ticket   Ticket @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  uploader User   @relation(fields: [uploaded_by], references: [id])
+
+  @@index([ticket_id])
+  @@map("attachments")
+}
+
+// ─── TABLA: audit_logs (extensión seguridad) ────────────────
+// Trazabilidad del sistema: logins, cambios, accesos denegados
+// NO REPUDIO — inmutable una vez creado
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  user_id     Int?
+  action      String   @db.VarChar(100)
+  resource    String   @db.VarChar(100)
+  resource_id String?  @db.VarChar(50)
+  details     Json?
+  ip_address  String?  @db.VarChar(45)
+  user_agent  String?  @db.VarChar(500)
+  success     Boolean  @default(true)
+  error_msg   String?  @db.VarChar(500)
+  timestamp   DateTime @default(now())
+
+  user User? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([action])
+  @@index([timestamp])
+  @@map("audit_logs")
+}

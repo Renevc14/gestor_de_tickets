@@ -4,12 +4,13 @@
  */
 
 import React, { useState } from 'react';
+import TicketFlowLogo from './Logo';
 import { useNavigate } from 'react-router-dom';
 import { authAPI, setToken } from '../services/api';
 
 const Login = () => {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({ username: '', password: '' });
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [mfaData, setMfaData] = useState({ userId: '', mfaCode: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,7 +32,7 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await authAPI.login(formData.username, formData.password);
+      const response = await authAPI.login(formData.email, formData.password);
 
       if (response.data.mfaRequired) {
         // AUTENTICACIÓN - Mostrar pantalla MFA
@@ -67,21 +68,18 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teams-blue via-dark-bg to-dark-bg-tertiary flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-dark-bg flex items-center justify-center p-4"
+         style={{ backgroundImage: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(99,102,241,0.12), transparent)' }}>
+      <div className="w-full max-w-[400px]">
         {/* Logo/Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 bg-teams-blue rounded-lg mb-4">
-            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m0 0h6m-6 0h-6" />
-            </svg>
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Ticket Manager</h1>
-          <p className="text-teams-gray text-sm">Sistema de Gestión de Incidentes</p>
+          <TicketFlowLogo size={48} className="mb-5" />
+          <h1 className="text-2xl font-bold text-white tracking-tight">TicketFlow</h1>
+          <p className="text-zinc-500 text-sm mt-1">Sistema de Gestión de Incidentes</p>
         </div>
 
         {/* Auth Box */}
-        <div className="bg-dark-bg-secondary border border-dark-bg-tertiary rounded-2xl p-8 shadow-teams-lg">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-teams-lg">
           <h2 className="text-2xl font-bold text-white mb-1">
             {showMFA ? 'Verificación de Seguridad' : 'Iniciar Sesión'}
           </h2>
@@ -103,18 +101,18 @@ const Login = () => {
 
           {!showMFA ? (
             <form onSubmit={handleLogin} className="space-y-4">
-              {/* Username Input */}
+              {/* Email Input */}
               <div className="form-group">
-                <label className="label">Nombre de Usuario</label>
+                <label className="label">Correo Electrónico</label>
                 <input
-                  type="text"
-                  name="username"
-                  value={formData.username}
+                  type="email"
+                  name="email"
+                  value={formData.email}
                   onChange={handleChange}
                   required
-                  placeholder="admin"
+                  placeholder="admin@ticketflow.com"
                   className="input"
-                  autoComplete="username"
+                  autoComplete="email"
                 />
               </div>
 
@@ -194,10 +192,10 @@ const Login = () => {
 
           {/* Register Link */}
           {!showMFA && (
-            <div className="mt-6 pt-6 border-t border-dark-bg-tertiary text-center">
-              <p className="text-teams-gray-dark text-sm">
+            <div className="mt-6 pt-6 border-t border-zinc-800 text-center">
+              <p className="text-zinc-500 text-sm">
                 ¿No tiene cuenta?{' '}
-                <a href="/register" className="text-teams-blue hover:text-teams-blue-hover font-semibold transition-colors">
+                <a href="/register" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
                   Regístrese aquí
                 </a>
               </p>
@@ -206,8 +204,8 @@ const Login = () => {
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-8 text-teams-gray-dark text-xs">
-          <p>Sistema seguro con autenticación de dos factores</p>
+        <div className="text-center mt-6 text-zinc-600 text-xs">
+          <p>Autenticación segura · JWT + MFA · TicketFlow 2025</p>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 /**
- * INTEGRIDAD - Rutas de Tickets
+ * INTEGRIDAD — Rutas de Tickets
+ * Monografía UCB: 6 estados, asignación, historial inmutable
  */
 
 const express = require('express');
@@ -8,114 +9,34 @@ const multer = require('multer');
 const ticketController = require('../controllers/ticketController');
 const attachmentController = require('../controllers/attachmentController');
 const { authenticateToken } = require('../middleware/auth');
-const { checkPermission } = require('../middleware/rbac');
+const { checkRole } = require('../middleware/rbac');
 
-// Configurar multer para carga de archivos en memoria
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 } // 10 MB
 });
 
-/**
- * POST /api/tickets
- * INTEGRIDAD - Crear nuevo ticket
- */
-router.post(
-  '/',
-  authenticateToken,
-  checkPermission('tickets', 'create'),
-  ticketController.createTicket
-);
+// ─── Tickets CRUD ────────────────────────────────────────────────────────────
+router.post('/', authenticateToken, ticketController.createTicket);
+router.get('/', authenticateToken, ticketController.listTickets);
+router.get('/:id', authenticateToken, ticketController.getTicket);
+router.patch('/:id', authenticateToken, ticketController.updateTicket);
 
-/**
- * GET /api/tickets
- * INTEGRIDAD - Listar tickets (según permisos del rol)
- */
-router.get(
-  '/',
-  authenticateToken,
-  ticketController.listTickets
-);
+// ─── Asignación (solo ADMINISTRADOR) ─────────────────────────────────────────
+router.patch('/:id/assign', authenticateToken, checkRole(['ADMINISTRADOR']), ticketController.assignTicket);
 
-/**
- * GET /api/tickets/:id
- * INTEGRIDAD - Obtener detalles de un ticket
- */
-router.get(
-  '/:id',
-  authenticateToken,
-  ticketController.getTicket
-);
+// ─── Cambio de estado (TECNICO o ADMINISTRADOR) ───────────────────────────────
+router.patch('/:id/status', authenticateToken, checkRole(['TECNICO', 'ADMINISTRADOR']), ticketController.changeStatus);
 
-/**
- * PUT /api/tickets/:id
- * INTEGRIDAD - Actualizar ticket
- */
-router.put(
-  '/:id',
-  authenticateToken,
-  ticketController.updateTicket
-);
+// ─── Comentarios ─────────────────────────────────────────────────────────────
+router.post('/:id/comments', authenticateToken, ticketController.addComment);
 
-/**
- * POST /api/tickets/:id/escalate
- * INTEGRIDAD - Escalar ticket
- */
-router.post(
-  '/:id/escalate',
-  authenticateToken,
-  ticketController.escalateTicket
-);
+// ─── Historial (inmutable) ────────────────────────────────────────────────────
+router.get('/:id/history', authenticateToken, ticketController.getHistory);
 
-/**
- * POST /api/tickets/:id/comments
- * INTEGRIDAD - Agregar comentario
- */
-router.post(
-  '/:id/comments',
-  authenticateToken,
-  ticketController.addComment
-);
-
-/**
- * GET /api/tickets/:id/history
- * INTEGRIDAD - Obtener historial de cambios
- */
-router.get(
-  '/:id/history',
-  authenticateToken,
-  ticketController.getHistory
-);
-
-/**
- * POST /api/tickets/:ticketId/attachments
- * SEGURIDAD - Subir archivo adjunto
- */
-router.post(
-  '/:ticketId/attachments',
-  authenticateToken,
-  upload.single('file'),
-  attachmentController.uploadAttachment
-);
-
-/**
- * GET /api/tickets/:ticketId/attachments/:attachmentId
- * SEGURIDAD - Descargar archivo adjunto (con verificación de integridad)
- */
-router.get(
-  '/:ticketId/attachments/:attachmentId',
-  authenticateToken,
-  attachmentController.downloadAttachment
-);
-
-/**
- * DELETE /api/tickets/:ticketId/attachments/:attachmentId
- * SEGURIDAD - Eliminar archivo adjunto
- */
-router.delete(
-  '/:ticketId/attachments/:attachmentId',
-  authenticateToken,
-  attachmentController.deleteAttachment
-);
+// ─── Adjuntos ────────────────────────────────────────────────────────────────
+router.post('/:ticketId/attachments', authenticateToken, upload.single('file'), attachmentController.uploadAttachment);
+router.get('/:ticketId/attachments/:attachmentId/download', authenticateToken, attachmentController.downloadAttachment);
+router.delete('/:ticketId/attachments/:attachmentId', authenticateToken, attachmentController.deleteAttachment);
 
 module.exports = router;

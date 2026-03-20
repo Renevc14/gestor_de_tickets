@@ -3,7 +3,7 @@
  * Muestra QR code y permite verificación con Google Authenticator
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { authAPI } from '../services/api';
 
 const MFASetup = ({ onComplete }) => {
@@ -14,8 +14,11 @@ const MFASetup = ({ onComplete }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showManualKey, setShowManualKey] = useState(false);
+  const hasFetched = useRef(false);
 
   useEffect(() => {
+    if (hasFetched.current) return;
+    hasFetched.current = true;
     handleGenerateQR();
   }, []);
 
@@ -118,7 +121,7 @@ const MFASetup = ({ onComplete }) => {
                       {manualKey}
                     </code>
                     <p className="text-xs text-teams-orange mt-3">
-                      ⚠️ Guarde esta clave en un lugar seguro (contraseña, caja fuerte)
+                      Guarde esta clave en un lugar seguro (gestor de contraseñas)
                     </p>
                   </div>
                 )}

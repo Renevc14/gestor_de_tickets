@@ -1,44 +1,27 @@
 /**
- * DISPONIBILIDAD - Configuración de conexión a MongoDB
- * Implementa reconexión automática y manejo de errores
+ * DATABASE — Prisma Client singleton
+ * Compatible con PostgreSQL local (desarrollo) y Railway (producción)
+ * La variable DATABASE_URL se configura en .env para cada entorno
  */
 
-const mongoose = require('mongoose');
+const { PrismaClient } = require('@prisma/client');
 
-const connectDB = async () => {
-  try {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/ticket_system';
-
-    const connection = await mongoose.connect(mongoUri, {
-      // DISPONIBILIDAD - Reconexión automática
-      retryWrites: true,
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000
-    });
-
-    console.log('✓ MongoDB conectado exitosamente');
-    return connection;
-  } catch (error) {
-    console.error('✗ Error conectando a MongoDB:', error.message);
-    process.exit(1);
-  }
-};
+const prisma = new PrismaClient({
+  log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+});
 
 /**
- * DISPONIBILIDAD - Health check para MongoDB
+ * Health check para Prisma/PostgreSQL
  */
 const healthCheck = async () => {
   try {
-    const adminDb = mongoose.connection.db.admin();
-    const status = await adminDb.ping();
-    return status.ok === 1;
+    await prisma.$queryRaw`SELECT 1`;
+    return true;
   } catch (error) {
     console.error('Health check fallido:', error.message);
     return false;
   }
 };
 
-module.exports = {
-  connectDB,
-  healthCheck
-};
+module.exports = prisma;
+module.exports.healthCheck = healthCheck;

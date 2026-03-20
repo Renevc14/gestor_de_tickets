@@ -1,37 +1,30 @@
 /**
- * CONFIDENCIALIDAD - Middleware de Control de Acceso Basado en Roles (RBAC)
- * Verifica permisos según el rol del usuario
+ * CONFIDENCIALIDAD — Middleware RBAC
+ * Monografía UCB: roles SOLICITANTE, TECNICO, ADMINISTRADOR
  */
 
 const { hasPermission, canAccessAuditLogs } = require('../helpers/rbac');
 const { logAccessDenied } = require('../helpers/audit');
 
 /**
- * CONFIDENCIALIDAD - Middleware: Verificar si rol tiene permiso
- * Uso: checkRole(['administrador', 'supervisor'])(req, res, next)
+ * Verificar que el rol del usuario está en la lista permitida
+ * Uso: checkRole(['ADMINISTRADOR', 'TECNICO'])
  */
 const checkRole = (allowedRoles) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: 'No autenticado'
-      });
+      return res.status(401).json({ success: false, message: 'No autenticado' });
     }
 
     if (!allowedRoles.includes(req.user.role)) {
       logAccessDenied(
-        req.user._id,
+        req.user.id,
         'system',
         'access_attempt',
-        `Rol no autorizado: ${req.user.role} no en ${allowedRoles.join(', ')}`,
+        `Rol no autorizado: ${req.user.role}`,
         req
       );
-
-      return res.status(403).json({
-        success: false,
-        message: 'Rol no autorizado para esta acción'
-      });
+      return res.status(403).json({ success: false, message: 'Rol no autorizado para esta acción' });
     }
 
     next();
@@ -39,33 +32,18 @@ const checkRole = (allowedRoles) => {
 };
 
 /**
- * CONFIDENCIALIDAD - Middleware: Verificar permisos específicos
- * Uso: checkPermission('tickets', 'create')(req, res, next)
+ * Verificar permiso específico sobre un recurso
+ * Uso: checkPermission('tickets', 'create')
  */
 const checkPermission = (resource, action) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: 'No autenticado'
-      });
+      return res.status(401).json({ success: false, message: 'No autenticado' });
     }
 
-    const allowed = hasPermission(req.user.role, resource, action);
-
-    if (!allowed) {
-      logAccessDenied(
-        req.user._id,
-        resource,
-        action,
-        `Permiso denegado: ${action} en ${resource}`,
-        req
-      );
-
-      return res.status(403).json({
-        success: false,
-        message: `No tiene permiso para ${action} ${resource}`
-      });
+    if (!hasPermission(req.user.role, resource, action)) {
+      logAccessDenied(req.user.id, resource, action, `Permiso denegado`, req);
+      return res.status(403).json({ success: false, message: `No tiene permiso para ${action} en ${resource}` });
     }
 
     next();
@@ -73,36 +51,19 @@ const checkPermission = (resource, action) => {
 };
 
 /**
- * CONFIDENCIALIDAD - Middleware: Verificar acceso a auditoría
+ * Verificar acceso a logs de auditoría (solo ADMINISTRADOR)
  */
 const checkAuditAccess = (req, res, next) => {
   if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: 'No autenticado'
-    });
+    return res.status(401).json({ success: false, message: 'No autenticado' });
   }
 
   if (!canAccessAuditLogs(req.user)) {
-    logAccessDenied(
-      req.user._id,
-      'auditLogs',
-      'view',
-      'Acceso denegado a logs de auditoría',
-      req
-    );
-
-    return res.status(403).json({
-      success: false,
-      message: 'No tiene acceso a logs de auditoría'
-    });
+    logAccessDenied(req.user.id, 'auditLogs', 'view', 'Acceso denegado a auditoría', req);
+    return res.status(403).json({ success: false, message: 'No tiene acceso a logs de auditoría' });
   }
 
   next();
 };
 
-module.exports = {
-  checkRole,
-  checkPermission,
-  checkAuditAccess
-};
+module.exports = { checkRole, checkPermission, checkAuditAccess };

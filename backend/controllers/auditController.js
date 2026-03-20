@@ -1,12 +1,11 @@
 /**
- * NO REPUDIO - Controlador de Auditoría
- * Maneja la consulta de logs de auditoría (inmutables)
+ * NO REPUDIO — Controlador de Auditoría
+ * Logs inmutables — solo lectura (nunca DELETE ni UPDATE)
  */
 
-const AuditLog = require('../models/AuditLog');
+const prisma = require('../config/database');
 
 /**
- * NO REPUDIO - Listar logs de auditoría con filtros
  * GET /api/audit-logs
  */
 const listAuditLogs = async (req, res) => {
@@ -17,54 +16,36 @@ const listAuditLogs = async (req, res) => {
       resource,
       startDate,
       endDate,
+      success,
       page = 1,
-      limit = 20,
-      sortBy = 'timestamp',
-      sortOrder = 'desc'
+      limit = 20
     } = req.query;
 
-    // Construir filtros
-    const filters = {};
+    const where = {};
 
-    if (userId) {
-      filters.user = userId;
-    }
+    if (userId) where.user_id = parseInt(userId);
+    if (action) where.action = { contains: action, mode: 'insensitive' };
+    if (resource) where.resource = resource;
+    if (success !== undefined) where.success = success === 'true';
 
-    if (action) {
-      filters.action = action;
-    }
-
-    if (resource) {
-      filters.resource = resource;
-    }
-
-    // Filtrar por rango de fechas
     if (startDate || endDate) {
-      filters.timestamp = {};
-      if (startDate) {
-        filters.timestamp.$gte = new Date(startDate);
-      }
-      if (endDate) {
-        filters.timestamp.$lte = new Date(endDate);
-      }
+      where.timestamp = {};
+      if (startDate) where.timestamp.gte = new Date(startDate);
+      if (endDate) where.timestamp.lte = new Date(endDate);
     }
 
-    // Calcular skip para paginación
-    const skip = (page - 1) * limit;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Definir orden
-    const sort = {};
-    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
-
-    // Obtener logs
-    const logs = await AuditLog.find(filters)
-      .populate('user', 'username email role')
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    // Contar total
-    const total = await AuditLog.countDocuments(filters);
+    const [logs, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        where,
+        include: { user: { select: { id: true, name: true, email: true, role: true } } },
+        orderBy: { timestamp: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.auditLog.count({ where })
+    ]);
 
     res.status(200).json({
       success: true,
@@ -73,122 +54,89 @@ const listAuditLogs = async (req, res) => {
         total,
         page: parseInt(page),
         limit: parseInt(limit),
-        pages: Math.ceil(total / limit)
+        pages: Math.ceil(total / parseInt(limit))
       }
     });
   } catch (error) {
     console.error('Error listando logs de auditoría:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error listando logs de auditoría'
-    });
+    res.status(500).json({ success: false, message: 'Error listando logs de auditoría' });
   }
 };
 
 /**
- * NO REPUDIO - Obtener estadísticas de auditoría
  * GET /api/audit-logs/stats
  */
 const getAuditStats = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 
-    // Construir filtro de fecha
-    const filters = {};
+    const where = {};
     if (startDate || endDate) {
-      filters.timestamp = {};
-      if (startDate) {
-        filters.timestamp.$gte = new Date(startDate);
-      }
-      if (endDate) {
-        filters.timestamp.$lte = new Date(endDate);
-      }
+      where.timestamp = {};
+      if (startDate) where.timestamp.gte = new Date(startDate);
+      if (endDate) where.timestamp.lte = new Date(endDate);
     }
 
-    // Contar por acción
-    const actionStats = await AuditLog.aggregate([
-      { $match: filters },
-      { $group: { _id: '$action', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
+    const [
+      totalEvents,
+      failedAttempts,
+      actionGroups,
+      resourceGroups
+    ] = await Promise.all([
+      prisma.auditLog.count({ where }),
+      prisma.auditLog.count({ where: { ...where, success: false } }),
+      prisma.auditLog.groupBy({
+        by: ['action'],
+        where,
+        _count: { action: true },
+        orderBy: { _count: { action: 'desc' } },
+        take: 10
+      }),
+      prisma.auditLog.groupBy({
+        by: ['resource'],
+        where,
+        _count: { resource: true },
+        orderBy: { _count: { resource: 'desc' } }
+      })
     ]);
 
-    // Contar por recurso
-    const resourceStats = await AuditLog.aggregate([
-      { $match: filters },
-      { $group: { _id: '$resource', count: { $sum: 1 } } }
-    ]);
-
-    // Contar por usuario
-    const userStats = await AuditLog.aggregate([
-      { $match: filters },
-      { $group: { _id: '$user', count: { $sum: 1 } } },
-      { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'userInfo' } },
-      { $unwind: '$userInfo' },
-      { $project: { username: '$userInfo.username', count: 1 } },
-      { $sort: { count: -1 } }
-    ]);
-
-    // Contar intentos fallidos
-    const failedAttempts = await AuditLog.countDocuments({
-      ...filters,
-      success: false
-    });
-
-    // Total de eventos
-    const totalEvents = await AuditLog.countDocuments(filters);
+    const actionStats = actionGroups.map(g => ({ action: g.action, count: g._count.action }));
+    const resourceStats = resourceGroups.map(g => ({ resource: g.resource, count: g._count.resource }));
+    const successRate = totalEvents > 0
+      ? ((totalEvents - failedAttempts) / totalEvents * 100).toFixed(2) + '%'
+      : 'N/A';
 
     res.status(200).json({
       success: true,
-      stats: {
-        totalEvents,
-        failedAttempts,
-        successRate: totalEvents > 0 ? ((totalEvents - failedAttempts) / totalEvents * 100).toFixed(2) + '%' : 'N/A',
-        actionStats,
-        resourceStats,
-        userStats
-      }
+      stats: { totalEvents, failedAttempts, successRate, actionStats, resourceStats }
     });
   } catch (error) {
     console.error('Error obteniendo estadísticas:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error obteniendo estadísticas'
-    });
+    res.status(500).json({ success: false, message: 'Error obteniendo estadísticas' });
   }
 };
 
 /**
- * NO REPUDIO - Obtener un log específico
  * GET /api/audit-logs/:id
  */
 const getAuditLog = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parseInt(req.params.id);
 
-    const log = await AuditLog.findById(id).populate('user', 'username email role');
+    const log = await prisma.auditLog.findUnique({
+      where: { id },
+      include: { user: { select: { id: true, name: true, email: true, role: true } } }
+    });
 
     if (!log) {
-      return res.status(404).json({
-        success: false,
-        message: 'Log no encontrado'
-      });
+      return res.status(404).json({ success: false, message: 'Log no encontrado' });
     }
 
-    res.status(200).json({
-      success: true,
-      log
-    });
+    res.status(200).json({ success: true, log });
   } catch (error) {
     console.error('Error obteniendo log:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error obteniendo log'
-    });
+    res.status(500).json({ success: false, message: 'Error obteniendo log' });
   }
 };
 
-module.exports = {
-  listAuditLogs,
-  getAuditStats,
-  getAuditLog
-};
+module.exports = { listAuditLogs, getAuditStats, getAuditLog };

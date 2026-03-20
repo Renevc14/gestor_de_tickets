@@ -30,7 +30,7 @@ const AuditLogs = () => {
       return;
     }
 
-    if (!['administrador', 'supervisor'].includes(user.role)) {
+    if (!['ADMINISTRADOR'].includes(user.role)) {
       navigate('/dashboard');
       return;
     }
@@ -94,16 +94,17 @@ const AuditLogs = () => {
     return date.toLocaleString('es-ES');
   };
 
-  const getActionBadgeClass = (action) => {
-    const classes = {
-      login_success: 'bg-teams-green text-green-100',
-      login_failed: 'bg-teams-red text-red-100',
-      login_blocked: 'bg-teams-orange text-orange-100',
-      ticket_created: 'bg-blue-900 text-blue-100',
-      ticket_updated: 'bg-purple-900 text-purple-100',
-      permission_denied: 'bg-teams-red text-red-100'
-    };
-    return classes[action] || 'bg-gray-700 text-gray-100';
+  const getActionBadgeStyle = (action) => {
+    const a = action?.toLowerCase();
+    if (a?.includes('success') || a?.includes('created') || a?.includes('resolved'))
+      return { background: 'rgba(3,166,109,0.1)', color: '#03A66D', borderColor: 'rgba(3,166,109,0.3)' };
+    if (a?.includes('failed') || a?.includes('denied') || a?.includes('locked') || a?.includes('breach'))
+      return { background: 'rgba(207,48,74,0.1)', color: '#CF304A', borderColor: 'rgba(207,48,74,0.3)' };
+    if (a?.includes('updated') || a?.includes('changed') || a?.includes('assigned'))
+      return { background: 'rgba(240,185,11,0.1)', color: '#F0B90B', borderColor: 'rgba(240,185,11,0.3)' };
+    if (a?.includes('login') || a?.includes('mfa'))
+      return { background: 'rgba(99,102,241,0.1)', color: '#818CF8', borderColor: 'rgba(99,102,241,0.3)' };
+    return { background: 'rgba(132,142,156,0.1)', color: '#848E9C', borderColor: 'rgba(132,142,156,0.3)' };
   };
 
   return (
@@ -115,7 +116,7 @@ const AuditLogs = () => {
             <div className="flex items-center gap-4">
               <button
                 onClick={() => navigate('/dashboard')}
-                className="p-2 hover:bg-blue-700 rounded-lg transition-colors duration-200"
+                className="p-2 hover:bg-dark-bg-secondary rounded-lg transition-colors duration-200"
               >
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -123,12 +124,12 @@ const AuditLogs = () => {
               </button>
               <div>
                 <h1 className="text-3xl font-bold text-white">Logs de Auditoría</h1>
-                <p className="text-blue-100 text-sm mt-1">Registro de eventos del sistema</p>
+                <p className="text-teams-gray-dark text-sm mt-1">Registro de eventos del sistema</p>
               </div>
             </div>
             <button
               onClick={() => setShowStats(!showStats)}
-              className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-semibold transition-colors duration-200"
+              className="btn-secondary text-sm"
             >
               {showStats ? '▼' : '▶'} {showStats ? 'Ocultar' : 'Mostrar'} Estadísticas
             </button>
@@ -263,11 +264,11 @@ const AuditLogs = () => {
                 </thead>
                 <tbody className="divide-y divide-dark-bg-tertiary">
                   {logs.map(log => (
-                    <tr key={log._id} className={`table-row-hover ${log.success ? '' : 'bg-red-900 bg-opacity-10'}`}>
+                    <tr key={log._id} className={`table-row-hover ${log.success ? '' : 'bg-red-500/5'}`}>
                       <td className="px-6 py-4 text-sm text-dark-secondary">{formatDate(log.timestamp)}</td>
-                      <td className="px-6 py-4 text-sm font-semibold text-teams-blue">{log.user?.username || 'Sistema'}</td>
+                      <td className="px-6 py-4 text-sm font-semibold text-teams-blue">{log.user?.name || 'Sistema'}</td>
                       <td className="px-6 py-4 text-sm">
-                        <span className={`badge ${getActionBadgeClass(log.action)}`}>
+                        <span className="badge" style={getActionBadgeStyle(log.action)}>
                           {log.action}
                         </span>
                       </td>

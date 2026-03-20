@@ -1,374 +1,207 @@
 /**
- * INTEGRIDAD Y SEGURIDAD - Controlador de Adjuntos
- * Maneja upload y descarga segura de archivos con validación
+ * INTEGRIDAD — Controlador de Adjuntos
+ * Tabla `attachments` en PostgreSQL con verificación SHA-256
  */
 
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
-const Ticket = require('../models/Ticket');
-const { validateAttachment, generateSecureFilename } = require('../helpers/validation');
+const prisma = require('../config/database');
 const { logAuditEvent } = require('../helpers/audit');
+const { validateAttachment, generateSecureFilename } = require('../helpers/validation');
+
+const UPLOADS_DIR = path.join(__dirname, '../uploads');
+
+const ALLOWED_MIMETYPES = [
+  'image/jpeg', 'image/png', 'image/gif',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain', 'text/csv'
+];
+
+function hasTicketAccess(ticket, user) {
+  if (user.role === 'ADMINISTRADOR') return true;
+  if (ticket.user_id === user.id) return true;
+  if (ticket.tech_id === user.id) return true;
+  return false;
+}
 
 /**
- * SEGURIDAD - Subir archivo adjunto a ticket
- * Valida MIME type, tamaño, sanitiza nombre
+ * POST /api/tickets/:ticketId/attachments
  */
 async function uploadAttachment(req, res) {
   try {
-    const { ticketId } = req.params;
+    const ticketId = parseInt(req.params.ticketId);
     const file = req.file;
-    const userId = req.user._id;
 
-    // Validar que el ticket existe
-    const ticket = await Ticket.findById(ticketId);
+    if (!file) {
+      return res.status(400).json({ success: false, message: 'No se recibió ningún archivo' });
+    }
+
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) {
-      await logAuditEvent({
-        user: userId,
-        action: 'file_upload_failed',
-        resource: 'ticket',
-        resourceId: ticketId,
-        details: { reason: 'Ticket no encontrado' },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-        success: false,
-        errorMessage: 'Ticket no encontrado'
-      });
-
-      return res.status(404).json({ error: 'Ticket no encontrado' });
+      return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
     }
 
-    // Validar acceso (solo quien creó o está asignado)
-    const hasAccess =
-      ticket.createdBy.toString() === userId.toString() ||
-      ticket.assignedTo?.toString() === userId.toString() ||
-      req.user.role === 'administrador' ||
-      req.user.role === 'supervisor';
-
-    if (!hasAccess) {
-      await logAuditEvent({
-        user: userId,
-        action: 'permission_denied',
-        resource: 'ticket',
-        resourceId: ticketId,
-        details: { action: 'file_upload' },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-        success: false,
-        errorMessage: 'No tiene permiso para subir archivos a este ticket'
-      });
-
-      return res.status(403).json({ error: 'No tiene permiso para subir archivos a este ticket' });
+    if (!hasTicketAccess(ticket, req.user)) {
+      await logAuditEvent(req.user.id, 'permission_denied', 'ticket', ticketId, { action: 'file_upload' }, req, false);
+      return res.status(403).json({ success: false, message: 'No tiene permiso para subir archivos a este ticket' });
     }
 
-    // Validar el archivo
+    // Validar tipo y tamaño
     const validation = validateAttachment(file, {
-      maxSize: 10 * 1024 * 1024, // 10MB
-      allowedMimeTypes: [
-        'image/jpeg',
-        'image/png',
-        'image/gif',
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'text/plain',
-        'text/csv'
-      ]
+      maxSize: 10 * 1024 * 1024, // 10 MB
+      allowedMimeTypes: ALLOWED_MIMETYPES
     });
 
     if (!validation.isValid) {
-      await logAuditEvent({
-        user: userId,
-        action: 'file_upload_failed',
-        resource: 'ticket',
-        resourceId: ticketId,
-        details: { errors: validation.errors },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-        success: false,
-        errorMessage: validation.errors.join('; ')
-      });
-
-      return res.status(400).json({ errors: validation.errors });
+      await logAuditEvent(req.user.id, 'file_upload_failed', 'ticket', ticketId, { errors: validation.errors }, req, false);
+      return res.status(400).json({ success: false, errors: validation.errors });
     }
-
-    // Generar nombre seguro
-    const secureFilename = generateSecureFilename(file.originalname);
-    const uploadsDir = path.join(__dirname, '../uploads');
 
     // Crear directorio si no existe
-    try {
-      await fs.mkdir(uploadsDir, { recursive: true });
-    } catch (err) {
-      console.error('Error creando directorio uploads:', err);
-    }
+    await fs.mkdir(UPLOADS_DIR, { recursive: true });
 
-    // Guardar archivo
-    const filePath = path.join(uploadsDir, secureFilename);
+    // Guardar archivo con nombre seguro
+    const secureFilename = generateSecureFilename(file.originalname);
+    const filePath = path.join(UPLOADS_DIR, secureFilename);
     await fs.writeFile(filePath, file.buffer);
 
-    // Calcular checksum del archivo
-    const fileBuffer = await fs.readFile(filePath);
-    const checksum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+    // Calcular checksum SHA-256
+    const checksum = crypto.createHash('sha256').update(file.buffer).digest('hex');
 
-    // Agregar información del archivo al ticket
-    const attachmentData = {
-      filename: secureFilename,
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-      checksum: checksum,
-      uploadedBy: userId,
-      uploadedAt: new Date(),
-      filePath: filePath
-    };
-
-    // Inicializar array de adjuntos si no existe
-    if (!ticket.attachments) {
-      ticket.attachments = [];
-    }
-
-    ticket.attachments.push(attachmentData);
-    await ticket.save();
-
-    // Loguear en auditoría
-    await logAuditEvent({
-      user: userId,
-      action: 'file_uploaded',
-      resource: 'ticket',
-      resourceId: ticketId,
-      details: {
+    // Guardar en tabla attachments
+    const attachment = await prisma.attachment.create({
+      data: {
+        ticket_id: ticketId,
         filename: secureFilename,
-        originalName: file.originalname,
+        path: filePath,
+        mimetype: file.mimetype,
         size: file.size,
-        mimeType: file.mimetype
-      },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-      success: true
-    });
-
-    return res.status(200).json({
-      message: 'Archivo subido exitosamente',
-      attachment: {
-        filename: secureFilename,
-        originalName: file.originalname,
-        size: file.size,
-        uploadedAt: attachmentData.uploadedAt
+        checksum,
+        uploaded_by: req.user.id
       }
     });
 
+    await logAuditEvent(req.user.id, 'file_uploaded', 'attachment', attachment.id, {
+      filename: secureFilename,
+      originalName: file.originalname,
+      size: file.size,
+      checksum
+    }, req, true);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Archivo subido exitosamente',
+      attachment: {
+        id: attachment.id,
+        filename: secureFilename,
+        originalName: file.originalname,
+        size: file.size,
+        uploaded_at: attachment.uploaded_at
+      }
+    });
   } catch (error) {
     console.error('Error subiendo archivo:', error);
-    return res.status(500).json({ error: 'Error al subir el archivo' });
+    return res.status(500).json({ success: false, message: 'Error al subir el archivo' });
   }
 }
 
 /**
- * SEGURIDAD - Descargar archivo adjunto
- * Verifica permisos y checksum antes de descargar
+ * GET /api/tickets/:ticketId/attachments/:attachmentId/download
  */
 async function downloadAttachment(req, res) {
   try {
-    const { ticketId, attachmentId } = req.params;
-    const userId = req.user._id;
+    const ticketId = parseInt(req.params.ticketId);
+    const attachmentId = parseInt(req.params.attachmentId);
 
-    // Validar que el ticket existe
-    const ticket = await Ticket.findById(ticketId);
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) {
-      await logAuditEvent({
-        user: userId,
-        action: 'file_download_failed',
-        resource: 'ticket',
-        resourceId: ticketId,
-        details: { reason: 'Ticket no encontrado' },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-        success: false,
-        errorMessage: 'Ticket no encontrado'
-      });
-
-      return res.status(404).json({ error: 'Ticket no encontrado' });
+      return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
     }
 
-    // Validar acceso
-    const hasAccess =
-      ticket.createdBy.toString() === userId.toString() ||
-      ticket.assignedTo?.toString() === userId.toString() ||
-      req.user.role === 'administrador' ||
-      req.user.role === 'supervisor';
-
-    if (!hasAccess) {
-      await logAuditEvent({
-        user: userId,
-        action: 'permission_denied',
-        resource: 'ticket',
-        resourceId: ticketId,
-        details: { action: 'file_download', attachmentId },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-        success: false,
-        errorMessage: 'No tiene permiso para descargar archivos de este ticket'
-      });
-
-      return res.status(403).json({ error: 'No tiene permiso' });
+    if (!hasTicketAccess(ticket, req.user)) {
+      await logAuditEvent(req.user.id, 'permission_denied', 'ticket', ticketId, { action: 'file_download' }, req, false);
+      return res.status(403).json({ success: false, message: 'No tiene permiso' });
     }
 
-    // Encontrar el archivo
-    const attachment = ticket.attachments?.find(
-      att => att._id.toString() === attachmentId
-    );
+    const attachment = await prisma.attachment.findFirst({
+      where: { id: attachmentId, ticket_id: ticketId }
+    });
 
     if (!attachment) {
-      await logAuditEvent({
-        user: userId,
-        action: 'file_download_failed',
-        resource: 'ticket',
-        resourceId: ticketId,
-        details: { reason: 'Archivo no encontrado', attachmentId },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-        success: false,
-        errorMessage: 'Archivo no encontrado'
-      });
-
-      return res.status(404).json({ error: 'Archivo no encontrado' });
+      return res.status(404).json({ success: false, message: 'Archivo no encontrado' });
     }
 
-    // Verificar que el archivo existe en el sistema de archivos
+    // Verificar que el archivo existe
     try {
-      await fs.access(attachment.filePath);
-    } catch (err) {
-      return res.status(404).json({ error: 'Archivo no disponible' });
+      await fs.access(attachment.path);
+    } catch {
+      return res.status(404).json({ success: false, message: 'Archivo no disponible en disco' });
     }
 
-    // Verificar integridad del archivo (checksum)
-    const fileBuffer = await fs.readFile(attachment.filePath);
+    // Verificar integridad (SHA-256)
+    const fileBuffer = await fs.readFile(attachment.path);
     const calculatedChecksum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
     if (calculatedChecksum !== attachment.checksum) {
-      await logAuditEvent({
-        user: userId,
-        action: 'file_download_failed',
-        resource: 'ticket',
-        resourceId: ticketId,
-        details: { reason: 'Checksum no coincide', attachmentId },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-        success: false,
-        errorMessage: 'Archivo corrupto: checksum no coincide'
-      });
-
-      return res.status(400).json({ error: 'Archivo corrupto' });
+      await logAuditEvent(req.user.id, 'file_integrity_failed', 'attachment', attachmentId, {}, req, false, 'Checksum no coincide');
+      return res.status(400).json({ success: false, message: 'Archivo corrupto: checksum no coincide' });
     }
 
-    // Loguear descarga
-    await logAuditEvent({
-      user: userId,
-      action: 'file_downloaded',
-      resource: 'ticket',
-      resourceId: ticketId,
-      details: {
-        filename: attachment.filename,
-        originalName: attachment.originalName,
-        size: attachment.size
-      },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-      success: true
-    });
+    await logAuditEvent(req.user.id, 'file_downloaded', 'attachment', attachmentId, { filename: attachment.filename }, req, true);
 
-    // Enviar archivo
-    res.download(attachment.filePath, attachment.originalName);
-
+    res.download(attachment.path, attachment.filename);
   } catch (error) {
     console.error('Error descargando archivo:', error);
-    return res.status(500).json({ error: 'Error al descargar el archivo' });
+    return res.status(500).json({ success: false, message: 'Error al descargar el archivo' });
   }
 }
 
 /**
- * SEGURIDAD - Eliminar archivo adjunto
+ * DELETE /api/tickets/:ticketId/attachments/:attachmentId
  */
 async function deleteAttachment(req, res) {
   try {
-    const { ticketId, attachmentId } = req.params;
-    const userId = req.user._id;
+    const ticketId = parseInt(req.params.ticketId);
+    const attachmentId = parseInt(req.params.attachmentId);
 
-    // Validar que el ticket existe
-    const ticket = await Ticket.findById(ticketId);
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) {
-      return res.status(404).json({ error: 'Ticket no encontrado' });
+      return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
     }
 
-    // Validar acceso (solo quien creó, asignado, admin o supervisor)
-    const hasAccess =
-      ticket.createdBy.toString() === userId.toString() ||
-      ticket.assignedTo?.toString() === userId.toString() ||
-      req.user.role === 'administrador' ||
-      req.user.role === 'supervisor';
-
-    if (!hasAccess) {
-      await logAuditEvent({
-        user: userId,
-        action: 'permission_denied',
-        resource: 'ticket',
-        resourceId: ticketId,
-        details: { action: 'file_delete', attachmentId },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-        success: false
-      });
-
-      return res.status(403).json({ error: 'No tiene permiso' });
+    if (!hasTicketAccess(ticket, req.user)) {
+      return res.status(403).json({ success: false, message: 'No tiene permiso' });
     }
 
-    // Encontrar el archivo
-    const attachmentIndex = ticket.attachments?.findIndex(
-      att => att._id.toString() === attachmentId
-    );
-
-    if (attachmentIndex === -1 || attachmentIndex === undefined) {
-      return res.status(404).json({ error: 'Archivo no encontrado' });
-    }
-
-    const attachment = ticket.attachments[attachmentIndex];
-
-    // Eliminar archivo del sistema de archivos
-    try {
-      await fs.unlink(attachment.filePath);
-    } catch (err) {
-      console.error('Error eliminando archivo:', err);
-    }
-
-    // Remover del array
-    ticket.attachments.splice(attachmentIndex, 1);
-    await ticket.save();
-
-    // Loguear en auditoría
-    await logAuditEvent({
-      user: userId,
-      action: 'file_deleted',
-      resource: 'ticket',
-      resourceId: ticketId,
-      details: { filename: attachment.filename },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-      success: true
+    const attachment = await prisma.attachment.findFirst({
+      where: { id: attachmentId, ticket_id: ticketId }
     });
 
-    return res.status(200).json({ message: 'Archivo eliminado exitosamente' });
+    if (!attachment) {
+      return res.status(404).json({ success: false, message: 'Archivo no encontrado' });
+    }
 
+    // Eliminar archivo físico
+    try {
+      await fs.unlink(attachment.path);
+    } catch (err) {
+      console.error('Error eliminando archivo físico:', err.message);
+    }
+
+    await prisma.attachment.delete({ where: { id: attachmentId } });
+
+    await logAuditEvent(req.user.id, 'file_deleted', 'attachment', attachmentId, { filename: attachment.filename }, req, true);
+
+    return res.status(200).json({ success: true, message: 'Archivo eliminado exitosamente' });
   } catch (error) {
     console.error('Error eliminando archivo:', error);
-    return res.status(500).json({ error: 'Error al eliminar el archivo' });
+    return res.status(500).json({ success: false, message: 'Error al eliminar el archivo' });
   }
 }
 
-module.exports = {
-  uploadAttachment,
-  downloadAttachment,
-  deleteAttachment
-};
+module.exports = { uploadAttachment, downloadAttachment, deleteAttachment };
