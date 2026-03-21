@@ -43,3 +43,6 @@ EF-Documento-Entrega.html
 
 # Claude
 .claude/
+
+# Documentación interna
+docs/

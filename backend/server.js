@@ -145,7 +145,9 @@ const startServer = async () => {
   }
 };
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
 
 process.on('unhandledRejection', (error) => {
   console.error('✗ Unhandled Rejection:', error);
