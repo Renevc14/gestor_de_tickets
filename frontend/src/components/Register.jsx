@@ -37,7 +37,7 @@ const Register = () => {
         hasUppercase: /[A-Z]/.test(value),
         hasLowercase: /[a-z]/.test(value),
         hasNumbers: /\d/.test(value),
-        hasSpecialChars: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(value)
+        hasSpecialChars: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value)
       });
     }
   };

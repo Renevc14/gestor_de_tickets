@@ -155,6 +155,7 @@ const UserManagement = () => {
   const [editUser, setEditUser] = useState(null);
   const [filters, setFilters] = useState({ role: '', status: '' });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { loadUsers(); }, [filters]);
 
   const loadUsers = async () => {

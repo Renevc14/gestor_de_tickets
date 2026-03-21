@@ -37,6 +37,7 @@ const AuditLogs = () => {
 
     loadLogs();
     loadStats();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.action, filters.resource, filters.page]);
 
   const loadLogs = async () => {
@@ -75,18 +76,6 @@ const AuditLogs = () => {
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     setFilters(prev => ({ ...prev, [name]: value, page: 1 }));
-  };
-
-  const getActionColor = (action) => {
-    const colors = {
-      login_success: '#4caf50',
-      login_failed: '#f44336',
-      login_blocked: '#ff9800',
-      ticket_created: '#2196f3',
-      ticket_updated: '#9c27b0',
-      permission_denied: '#f44336'
-    };
-    return colors[action] || '#666';
   };
 
   const formatDate = (dateString) => {

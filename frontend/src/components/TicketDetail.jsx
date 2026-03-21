@@ -195,6 +195,7 @@ const TicketDetail = () => {
         .then(res => setTechnicians(res.data.users || []))
         .catch(() => {});
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const loadTicket = async () => {

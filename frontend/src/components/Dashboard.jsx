@@ -312,12 +312,14 @@ const Dashboard = () => {
   useEffect(() => {
     if (!user) { navigate('/login'); return; }
     loadTickets();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.status, filters.priority, filters.page]);
 
   // Métricas: solo se cargan una vez al montar el componente
   useEffect(() => {
     if (!user || user.role !== 'ADMINISTRADOR') return;
     loadMetrics();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadTickets = async () => {

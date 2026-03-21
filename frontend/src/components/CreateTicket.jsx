@@ -25,6 +25,7 @@ const CreateTicket = () => {
   useEffect(() => {
     if (!user) { navigate('/login'); return; }
     loadCategories();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadCategories = async () => {
