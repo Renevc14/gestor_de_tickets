@@ -97,7 +97,7 @@ const listTickets = async (req, res) => {
 
     const roleWhere = getTicketFilters(req.user);
 
-    const where = { ...roleWhere };
+    const where = { ...roleWhere, deleted_at: null };
     if (status) where.status = status;
     if (priority) where.priority = priority;
     if (category_id) where.category_id = parseInt(category_id);
@@ -152,7 +152,7 @@ const getTicket = async (req, res) => {
 
     const ticket = await prisma.ticket.findUnique({ where: { id }, include: ticketInclude });
 
-    if (!ticket) {
+    if (!ticket || ticket.deleted_at) {
       return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
     }
 
@@ -421,6 +421,45 @@ const getHistory = async (req, res) => {
   }
 };
 
+/**
+ * DELETE /api/tickets/:id — Eliminacion logica (soft delete) — §3.1.3.1
+ * Solo ADMINISTRADOR
+ */
+const deleteTicket = async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+
+    const ticket = await prisma.ticket.findUnique({ where: { id } });
+    if (!ticket || ticket.deleted_at) {
+      return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
+    }
+
+    const deletedAt = new Date();
+
+    await prisma.ticket.update({
+      where: { id },
+      data: { deleted_at: deletedAt }
+    });
+
+    await prisma.ticketHistory.create({
+      data: {
+        ticket_id: id,
+        user_id: req.user.id,
+        field_changed: 'deleted_at',
+        old_value: null,
+        new_value: deletedAt.toISOString()
+      }
+    });
+
+    await logAuditEvent(req.user.id, 'ticket_deleted', 'ticket', String(id), {}, req, true);
+
+    return res.status(200).json({ success: true, message: 'Ticket eliminado' });
+  } catch (error) {
+    console.error('Error eliminando ticket:', error);
+    return res.status(500).json({ success: false, message: 'Error eliminando ticket' });
+  }
+};
+
 module.exports = {
   createTicket,
   listTickets,
@@ -429,5 +468,6 @@ module.exports = {
   assignTicket,
   changeStatus,
   addComment,
-  getHistory
+  getHistory,
+  deleteTicket
 };
