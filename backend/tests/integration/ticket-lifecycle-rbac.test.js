@@ -526,3 +526,42 @@ describe('Escenario 5 — Reapertura por SOLICITANTE', () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ===============================================================================
+// ESCENARIO 6: Exportacion de reportes a Excel (RF06)
+// ===============================================================================
+
+describe('Escenario 6 — Exportacion a Excel', () => {
+  test('ADMINISTRADOR puede exportar reporte → 200 con Content-Type xlsx', async () => {
+    const res = await request(app)
+      .get('/api/reports/export')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/spreadsheetml/);
+    expect(res.headers['content-disposition']).toMatch(/attachment/);
+    expect(res.body.length).toBeGreaterThan(0);
+  });
+
+  test('SOLICITANTE no puede exportar reportes → 403', async () => {
+    const res = await request(app)
+      .get('/api/reports/export')
+      .set('Authorization', `Bearer ${solicitanteAToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  test('TECNICO no puede exportar reportes → 403', async () => {
+    const res = await request(app)
+      .get('/api/reports/export')
+      .set('Authorization', `Bearer ${tecnicoToken}`);
+
+    expect(res.status).toBe(403);
+  });
+});
