@@ -373,6 +373,16 @@ const Dashboard = () => {
 
   const handleLogout = () => { clearAuth(); navigate('/login'); };
 
+  const handleDeleteTicket = async (ticketId) => {
+    if (!window.confirm('Eliminar este ticket? Esta accion no se puede deshacer.')) return;
+    try {
+      await ticketAPI.deleteTicket(ticketId);
+      setTickets(prev => prev.filter(t => t.id !== ticketId));
+    } catch (err) {
+      setError(err.response?.data?.message || 'Error al eliminar el ticket');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-dark-bg">
       {/* Header */}
@@ -578,13 +588,21 @@ const Dashboard = () => {
                       <td className="px-4 py-3 text-sm" style={{ color: '#848E9C' }}>
                         {new Date(ticket.created_at).toLocaleDateString('es-ES')}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 flex items-center gap-2">
                         <button
                           onClick={() => navigate(`/tickets/${ticket.id}`)}
                           className="btn-ghost-gold"
                         >
                           Ver
                         </button>
+                        {user?.role === 'ADMINISTRADOR' && (
+                          <button
+                            onClick={() => handleDeleteTicket(ticket.id)}
+                            className="btn-danger text-xs px-2 py-1"
+                          >
+                            Eliminar
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

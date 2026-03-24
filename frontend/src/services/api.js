@@ -95,7 +95,10 @@ export const ticketAPI = {
     api.get(`/tickets/${ticketId}/attachments/${attachmentId}/download`, { responseType: 'blob' }),
 
   deleteAttachment: (ticketId, attachmentId) =>
-    api.delete(`/tickets/${ticketId}/attachments/${attachmentId}`)
+    api.delete(`/tickets/${ticketId}/attachments/${attachmentId}`),
+
+  deleteTicket: (id) =>
+    api.delete(`/tickets/${id}`)
 };
 
 // ─── Users (solo ADMINISTRADOR) ──────────────────────────────────────────────

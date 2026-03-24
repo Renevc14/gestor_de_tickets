@@ -35,6 +35,9 @@ router.post('/:id/comments', authenticateToken, ticketController.addComment);
 // ─── Historial (inmutable) ────────────────────────────────────────────────────
 router.get('/:id/history', authenticateToken, ticketController.getHistory);
 
+// ─── Eliminacion logica (solo ADMINISTRADOR) ──────────────────────────────────
+router.delete('/:id', authenticateToken, checkRole(['ADMINISTRADOR']), ticketController.deleteTicket);
+
 // ─── Adjuntos ────────────────────────────────────────────────────────────────
 router.post('/:ticketId/attachments', authenticateToken, upload.single('file'), attachmentController.uploadAttachment);
 router.get('/:ticketId/attachments/:attachmentId/download', authenticateToken, attachmentController.downloadAttachment);

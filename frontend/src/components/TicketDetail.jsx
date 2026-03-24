@@ -320,6 +320,16 @@ const TicketDetail = () => {
     }
   };
 
+  const handleDeleteTicket = async () => {
+    if (!window.confirm('Eliminar este ticket permanentemente? No aparecera en los listados.')) return;
+    try {
+      await ticketAPI.deleteTicket(id);
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Error al eliminar el ticket');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-dark-bg flex items-center justify-center">
@@ -350,16 +360,23 @@ const TicketDetail = () => {
       {/* Header */}
       <header className="bg-gradient-to-r from-teams-blue to-teams-blue-hover shadow-lg">
         <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-dark-bg-secondary rounded-lg transition-colors">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <div>
-              <h1 className="text-2xl font-bold text-white tracking-tight">Ticket #{ticket.id}</h1>
-              <p className="text-teams-gray-dark text-sm mt-0.5 truncate max-w-xl">{ticket.title}</p>
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-4">
+              <button onClick={() => navigate('/dashboard')} className="p-2 hover:bg-dark-bg-secondary rounded-lg transition-colors">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-white tracking-tight">Ticket #{ticket.id}</h1>
+                <p className="text-teams-gray-dark text-sm mt-0.5 truncate max-w-xl">{ticket.title}</p>
+              </div>
             </div>
+            {user?.role === 'ADMINISTRADOR' && (
+              <button onClick={handleDeleteTicket} className="btn-danger px-3 py-1.5 text-xs">
+                Eliminar ticket
+              </button>
+            )}
           </div>
         </div>
       </header>

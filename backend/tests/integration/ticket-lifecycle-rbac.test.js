@@ -623,3 +623,74 @@ describe('Escenario 7 — Busqueda por palabras clave', () => {
     expect(withSearch.body.pagination.total).toBe(all.body.pagination.total);
   });
 });
+
+// ===============================================================================
+// ESCENARIO 8: Eliminacion logica de tickets (§3.1.3.1)
+// ===============================================================================
+
+describe('Escenario 8 — Eliminacion logica de tickets', () => {
+  let ticketToDeleteId;
+
+  beforeAll(async () => {
+    const res = await request(app)
+      .post('/api/tickets')
+      .set('Authorization', `Bearer ${solicitanteAToken}`)
+      .send({
+        title: 'Ticket para eliminar logicamente',
+        description: 'Este ticket sera eliminado de forma logica por el admin',
+        category_id: testCategory.id
+      });
+    ticketToDeleteId = res.body.ticket.id;
+  });
+
+  test('SOLICITANTE no puede eliminar un ticket → 403', async () => {
+    const res = await request(app)
+      .delete(`/api/tickets/${ticketToDeleteId}`)
+      .set('Authorization', `Bearer ${solicitanteAToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  test('TECNICO no puede eliminar un ticket → 403', async () => {
+    const res = await request(app)
+      .delete(`/api/tickets/${ticketToDeleteId}`)
+      .set('Authorization', `Bearer ${tecnicoToken}`);
+
+    expect(res.status).toBe(403);
+  });
+
+  test('ADMINISTRADOR elimina ticket logicamente → 200', async () => {
+    const res = await request(app)
+      .delete(`/api/tickets/${ticketToDeleteId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  test('ticket eliminado no aparece en el listado', async () => {
+    const res = await request(app)
+      .get('/api/tickets')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    const found = res.body.tickets.find(t => t.id === ticketToDeleteId);
+    expect(found).toBeUndefined();
+  });
+
+  test('ticket eliminado devuelve 404 en GET /tickets/:id', async () => {
+    const res = await request(app)
+      .get(`/api/tickets/${ticketToDeleteId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  test('eliminar ticket inexistente → 404', async () => {
+    const res = await request(app)
+      .delete('/api/tickets/999999')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(404);
+  });
+});
