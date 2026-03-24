@@ -302,9 +302,22 @@ const changeStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Ticket no encontrado' });
     }
 
-    // Técnico puede cambiar estados de sus tickets; admin puede todo
-    if (req.user.role !== 'ADMINISTRADOR' && ticket.tech_id !== req.user.id) {
-      return res.status(403).json({ success: false, message: 'Solo el técnico asignado o un administrador puede cambiar el estado' });
+    // RBAC por rol:
+    // - ADMINISTRADOR: puede cambiar cualquier estado
+    // - TECNICO: solo si es el tecnico asignado al ticket
+    // - SOLICITANTE: solo puede cambiar RESUELTO → REABIERTO en su propio ticket
+    if (req.user.role === 'ADMINISTRADOR') {
+      // sin restriccion
+    } else if (req.user.role === 'TECNICO') {
+      if (ticket.tech_id !== req.user.id) {
+        return res.status(403).json({ success: false, message: 'Solo el tecnico asignado puede cambiar el estado' });
+      }
+    } else if (req.user.role === 'SOLICITANTE') {
+      if (ticket.user_id !== req.user.id || ticket.status !== 'RESUELTO' || status !== 'REABIERTO') {
+        return res.status(403).json({ success: false, message: 'Solo puedes reabrir tus propios tickets resueltos' });
+      }
+    } else {
+      return res.status(403).json({ success: false, message: 'No autorizado' });
     }
 
     const updateData = { status };

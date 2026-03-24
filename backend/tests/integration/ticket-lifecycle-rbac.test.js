@@ -215,9 +215,7 @@ describe('Escenario 2 — Ciclo de vida completo NUEVO → CERRADO', () => {
       .send({ status: 'RESUELTO' });
 
     expect(res.status).toBe(403);
-    // El middleware RBAC intercepta antes que el controlador → mensaje de "no autorizado"
-    // El controlador retorna "Solo el técnico asignado..." solo si RBAC lo permite pasar
-    expect(res.body.message).toMatch(/técnico asignado|administrador|no autorizado/i);
+    expect(res.body.message).toMatch(/tecnico asignado|administrador|no autorizado|reabrir/i);
   });
 
   test('ADMINISTRADOR agrega comentario → 201', async () => {
@@ -457,5 +455,74 @@ describe('Escenario 4 — Validación de campos y valores inválidos', () => {
       .get('/api/tickets/999999')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(404);
+  });
+});
+
+// ===============================================================================
+// ESCENARIO 5: SOLICITANTE solicita reapertura de ticket resuelto
+// ===============================================================================
+
+describe('Escenario 5 — Reapertura por SOLICITANTE', () => {
+  let reopenTicketId;
+
+  beforeAll(async () => {
+    // Crear ticket como SOLICITANTE-A
+    const createRes = await request(app)
+      .post('/api/tickets')
+      .set('Authorization', `Bearer ${solicitanteAToken}`)
+      .send({ title: 'Ticket para reapertura', description: 'Test reapertura', category_id: testCategory.id });
+    reopenTicketId = createRes.body.ticket.id;
+
+    // Asignar al tecnico
+    await request(app)
+      .patch(`/api/tickets/${reopenTicketId}/assign`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ tech_id: tecnicoUser.id });
+
+    // Tecnico mueve a EN_PROCESO
+    await request(app)
+      .patch(`/api/tickets/${reopenTicketId}/status`)
+      .set('Authorization', `Bearer ${tecnicoToken}`)
+      .send({ status: 'EN_PROCESO' });
+
+    // Tecnico mueve a RESUELTO
+    await request(app)
+      .patch(`/api/tickets/${reopenTicketId}/status`)
+      .set('Authorization', `Bearer ${tecnicoToken}`)
+      .send({ status: 'RESUELTO' });
+  });
+
+  test('SOLICITANTE puede reabrir su propio ticket RESUELTO → 200', async () => {
+    const res = await request(app)
+      .patch(`/api/tickets/${reopenTicketId}/status`)
+      .set('Authorization', `Bearer ${solicitanteAToken}`)
+      .send({ status: 'REABIERTO' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ticket.status).toBe('REABIERTO');
+  });
+
+  test('SOLICITANTE-B no puede reabrir el ticket de SOLICITANTE-A → 403', async () => {
+    // Primero devolver el ticket a RESUELTO para poder intentarlo
+    await request(app)
+      .patch(`/api/tickets/${reopenTicketId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'RESUELTO' });
+
+    const res = await request(app)
+      .patch(`/api/tickets/${reopenTicketId}/status`)
+      .set('Authorization', `Bearer ${solicitanteBToken}`)
+      .send({ status: 'REABIERTO' });
+
+    expect(res.status).toBe(403);
+  });
+
+  test('SOLICITANTE no puede cambiar RESUELTO a un estado distinto de REABIERTO → 403', async () => {
+    const res = await request(app)
+      .patch(`/api/tickets/${reopenTicketId}/status`)
+      .set('Authorization', `Bearer ${solicitanteAToken}`)
+      .send({ status: 'CERRADO' });
+
+    expect(res.status).toBe(403);
   });
 });
