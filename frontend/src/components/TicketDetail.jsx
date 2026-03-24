@@ -184,7 +184,11 @@ const TicketDetail = () => {
   const [comment, setComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const commentsEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (!user) { navigate('/login'); return; }
@@ -266,6 +270,53 @@ const TicketDetail = () => {
       setError(err.response?.data?.message || 'Error al cambiar estado');
     } finally {
       setChangingStatus(false);
+    }
+  };
+
+  const handleUpload = async (e) => {
+    e.preventDefault();
+    if (!uploadFile) return;
+    setUploading(true);
+    setUploadError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      await ticketAPI.uploadAttachment(id, formData);
+      setUploadFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      const updated = await ticketAPI.getTicket(id);
+      setTicket(updated.data.ticket);
+    } catch (err) {
+      setUploadError(err.response?.data?.errors?.[0] || err.response?.data?.message || 'Error al subir el archivo');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDownload = async (att) => {
+    try {
+      const res = await ticketAPI.downloadAttachment(id, att.id);
+      const blob = new Blob([res.data], { type: res.headers['content-type'] });
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', att.filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      setError('Error al descargar el archivo');
+    }
+  };
+
+  const handleDeleteAttachment = async (attId) => {
+    if (!window.confirm('Eliminar este archivo?')) return;
+    try {
+      await ticketAPI.deleteAttachment(id, attId);
+      setTicket(prev => ({ ...prev, attachments: prev.attachments.filter(a => a.id !== attId) }));
+    } catch (err) {
+      setError(err.response?.data?.message || 'Error al eliminar el archivo');
     }
   };
 
@@ -496,10 +547,11 @@ const TicketDetail = () => {
                 Adjuntos
               </h2>
 
+              {/* Lista de archivos */}
               {!ticket.attachments || ticket.attachments.length === 0 ? (
                 <p className="text-dark-secondary italic text-center py-4 text-sm">Sin archivos adjuntos</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 mb-4">
                   {ticket.attachments.map((att) => (
                     <div key={att.id} className="flex items-center gap-2 p-2 bg-dark-bg-tertiary rounded-lg">
                       <svg className="w-4 h-4 text-teams-blue flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -509,10 +561,51 @@ const TicketDetail = () => {
                         <p className="text-dark-secondary text-sm truncate">{att.filename}</p>
                         <p className="text-teams-gray-dark text-xs">{(att.size / 1024).toFixed(1)} KB</p>
                       </div>
+                      <button
+                        onClick={() => handleDownload(att)}
+                        className="btn-ghost-gold text-xs px-2 py-1 flex-shrink-0"
+                        title="Descargar"
+                      >
+                        Descargar
+                      </button>
+                      {(user?.role === 'ADMINISTRADOR' || ticket.user_id === user?.id || ticket.tech_id === user?.id) && (
+                        <button
+                          onClick={() => handleDeleteAttachment(att.id)}
+                          className="text-xs px-2 py-1 rounded flex-shrink-0 transition-colors"
+                          style={{ color: '#CF304A', background: 'rgba(207,48,74,0.08)' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(207,48,74,0.18)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(207,48,74,0.08)'; }}
+                          title="Eliminar archivo"
+                        >
+                          Eliminar
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
+
+              {/* Formulario de subida */}
+              <form onSubmit={handleUpload} className="space-y-2 pt-3 border-t border-dark-bg-tertiary">
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+                    onChange={(e) => { setUploadFile(e.target.files[0] || null); setUploadError(''); }}
+                    className="text-xs text-dark-secondary flex-1 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-dark-bg-tertiary file:text-dark-secondary hover:file:bg-dark-bg cursor-pointer"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!uploadFile || uploading}
+                    className="btn-primary text-xs px-3 py-1.5 flex-shrink-0 disabled:opacity-50"
+                  >
+                    {uploading ? 'Subiendo...' : 'Subir'}
+                  </button>
+                </div>
+                {uploadError && <p className="text-xs" style={{ color: '#CF304A' }}>{uploadError}</p>}
+                <p className="text-xs" style={{ color: '#848E9C' }}>Max 10 MB. Formatos: JPG, PNG, GIF, PDF, DOC, XLS, TXT, CSV</p>
+              </form>
             </div>
           </div>
         </div>
