@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ticketAPI, userAPI, getStoredUser, clearAuth, getStoredToken } from '../services/api';
+import { ticketAPI, userAPI, getStoredUser, clearAuth } from '../services/api';
 
 const STATUS_STYLE = {
   NUEVO:      { background: 'rgba(240,185,11,0.1)', color: '#F0B90B', borderColor: 'rgba(240,185,11,0.3)' },
@@ -295,17 +295,12 @@ const TicketDetail = () => {
 
   const handleDownload = async (att) => {
     try {
-      const token = getStoredToken();
-      const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-      const url = `${apiBase}/tickets/${id}/attachments/${att.id}/download`;
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', att.filename);
-      // Incluir el token en la URL para la descarga directa
       const res = await ticketAPI.downloadAttachment(id, att.id);
       const blob = new Blob([res.data], { type: res.headers['content-type'] });
       const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
       link.href = blobUrl;
+      link.setAttribute('download', att.filename);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
