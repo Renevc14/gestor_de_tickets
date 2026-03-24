@@ -15,5 +15,6 @@ router.get('/dashboard', reportController.getDashboard);
 router.get('/by-tech', reportController.getByTech);
 router.get('/by-category', reportController.getByCategory);
 router.get('/resolution-time', reportController.getResolutionTime);
+router.get('/export', reportController.exportToExcel);
 
 module.exports = router;
