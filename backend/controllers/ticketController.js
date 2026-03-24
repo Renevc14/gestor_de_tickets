@@ -6,6 +6,7 @@
 const prisma = require('../config/database');
 const { canAccessTicket, getTicketFilters } = require('../helpers/rbac');
 const { logTicketCreated, logTicketUpdated, logAuditEvent } = require('../helpers/audit');
+const emailService = require('../services/emailService');
 
 // SLA según monografía (horas → ms)
 const SLA_HOURS = { CRITICA: 2, ALTA: 8, MEDIA: 24, BAJA: 72 };
@@ -283,6 +284,8 @@ const assignTicket = async (req, res) => {
 
     await logAuditEvent(req.user.id, 'ticket_assigned', 'ticket', id, { tech_id }, req, true);
 
+    emailService.sendTicketAssigned(tech, updated).catch(() => {});
+
     res.status(200).json({ success: true, message: 'Ticket asignado', ticket: updated });
   } catch (error) {
     console.error('Error asignando ticket:', error);
@@ -342,6 +345,20 @@ const changeStatus = async (req, res) => {
     });
 
     await logAuditEvent(req.user.id, 'ticket_status_changed', 'ticket', id, { old: ticket.status, new: status }, req, true);
+
+    // Notificacion al creador del ticket
+    if (updated.creator) {
+      emailService.sendStatusChanged(updated.creator, updated, ticket.status, status).catch(() => {});
+    }
+
+    // Si se reabrio, notificar a administradores
+    if (status === 'REABIERTO') {
+      prisma.user.findMany({ where: { role: 'ADMINISTRADOR', status: 'ACTIVO' } })
+        .then(admins => {
+          admins.forEach(admin => emailService.sendTicketReopened(admin, updated).catch(() => {}));
+        })
+        .catch(() => {});
+    }
 
     res.status(200).json({ success: true, message: `Estado cambiado a ${status}`, ticket: updated });
   } catch (error) {
