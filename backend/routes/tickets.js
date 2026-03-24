@@ -25,8 +25,9 @@ router.patch('/:id', authenticateToken, ticketController.updateTicket);
 // ─── Asignación (solo ADMINISTRADOR) ─────────────────────────────────────────
 router.patch('/:id/assign', authenticateToken, checkRole(['ADMINISTRADOR']), ticketController.assignTicket);
 
-// ─── Cambio de estado (TECNICO o ADMINISTRADOR) ───────────────────────────────
-router.patch('/:id/status', authenticateToken, checkRole(['TECNICO', 'ADMINISTRADOR']), ticketController.changeStatus);
+// ─── Cambio de estado ─────────────────────────────────────────────────────────
+// Validacion de rol se hace en el controlador para permitir al SOLICITANTE reabrir
+router.patch('/:id/status', authenticateToken, ticketController.changeStatus);
 
 // ─── Comentarios ─────────────────────────────────────────────────────────────
 router.post('/:id/comments', authenticateToken, ticketController.addComment);
