@@ -25,6 +25,9 @@ const { initializeSLAMonitoring } = require('./services/slaService');
 
 const app = express();
 
+// ─── Trust proxy (Railway / reverse proxies) ──────────────────────────────────
+app.set('trust proxy', 1);
+
 // ─── Seguridad: Helmet ────────────────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
