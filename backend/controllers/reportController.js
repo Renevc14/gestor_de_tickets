@@ -5,6 +5,7 @@
  */
 
 const prisma = require('../config/database');
+const ExcelJS = require('exceljs');
 
 /**
  * GET /api/reports/dashboard
@@ -217,4 +218,135 @@ const getResolutionTime = async (req, res) => {
   }
 };
 
-module.exports = { getDashboard, getByTech, getByCategory, getResolutionTime };
+/**
+ * GET /api/reports/export
+ * Exporta tickets y metricas por tecnico a un archivo Excel (.xlsx)
+ * Solo ADMINISTRADOR
+ */
+const exportToExcel = async (req, res) => {
+  try {
+    const [tickets, techs, categories] = await Promise.all([
+      prisma.ticket.findMany({
+        orderBy: { created_at: 'desc' },
+        include: {
+          creator: { select: { name: true, email: true } },
+          assignee: { select: { name: true } },
+          category: { select: { name: true } }
+        }
+      }),
+      prisma.user.findMany({
+        where: { role: 'TECNICO' },
+        select: { id: true, name: true, email: true }
+      }),
+      prisma.category.findMany({ select: { id: true, name: true } })
+    ]);
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'TicketFlow';
+    workbook.created = new Date();
+
+    // ── Hoja 1: Tickets ─────────────────────────────────────────────────────
+    const sheetTickets = workbook.addWorksheet('Tickets');
+
+    sheetTickets.columns = [
+      { header: 'ID',          key: 'id',          width: 8  },
+      { header: 'Titulo',      key: 'title',       width: 40 },
+      { header: 'Estado',      key: 'status',      width: 14 },
+      { header: 'Prioridad',   key: 'priority',    width: 12 },
+      { header: 'Categoria',   key: 'category',    width: 18 },
+      { header: 'Solicitante', key: 'requester',   width: 24 },
+      { header: 'Tecnico',     key: 'tech',        width: 24 },
+      { header: 'Creado',      key: 'created_at',  width: 20 },
+      { header: 'Resuelto',    key: 'resolved_at', width: 20 },
+      { header: 'Cerrado',     key: 'closed_at',   width: 20 }
+    ];
+
+    // Cabecera en negrita con fondo gris
+    sheetTickets.getRow(1).font = { bold: true };
+    sheetTickets.getRow(1).fill = {
+      type: 'pattern', pattern: 'solid',
+      fgColor: { argb: 'FFD9D9D9' }
+    };
+
+    for (const t of tickets) {
+      sheetTickets.addRow({
+        id:          t.id,
+        title:       t.title,
+        status:      t.status,
+        priority:    t.priority,
+        category:    t.category?.name || '',
+        requester:   t.creator?.name || '',
+        tech:        t.assignee?.name || '',
+        created_at:  t.created_at ? new Date(t.created_at).toLocaleString('es-ES') : '',
+        resolved_at: t.resolved_at ? new Date(t.resolved_at).toLocaleString('es-ES') : '',
+        closed_at:   t.closed_at  ? new Date(t.closed_at).toLocaleString('es-ES') : ''
+      });
+    }
+
+    // ── Hoja 2: Metricas por tecnico ─────────────────────────────────────────
+    const sheetTechs = workbook.addWorksheet('Carga por Tecnico');
+
+    sheetTechs.columns = [
+      { header: 'Tecnico',    key: 'name',      width: 28 },
+      { header: 'Email',      key: 'email',     width: 30 },
+      { header: 'Asignados',  key: 'assigned',  width: 14 },
+      { header: 'En Proceso', key: 'inProcess', width: 14 },
+      { header: 'Resueltos',  key: 'resolved',  width: 14 },
+      { header: 'Pendientes', key: 'pending',   width: 14 }
+    ];
+
+    sheetTechs.getRow(1).font = { bold: true };
+    sheetTechs.getRow(1).fill = {
+      type: 'pattern', pattern: 'solid',
+      fgColor: { argb: 'FFD9D9D9' }
+    };
+
+    for (const tech of techs) {
+      const [assigned, inProcess, resolved] = await Promise.all([
+        prisma.ticket.count({ where: { tech_id: tech.id } }),
+        prisma.ticket.count({ where: { tech_id: tech.id, status: 'EN_PROCESO' } }),
+        prisma.ticket.count({ where: { tech_id: tech.id, status: { in: ['RESUELTO', 'CERRADO'] } } })
+      ]);
+      sheetTechs.addRow({
+        name: tech.name,
+        email: tech.email,
+        assigned,
+        inProcess,
+        resolved,
+        pending: assigned - inProcess - resolved
+      });
+    }
+
+    // ── Hoja 3: Resumen por categoria ────────────────────────────────────────
+    const sheetCats = workbook.addWorksheet('Por Categoria');
+
+    sheetCats.columns = [
+      { header: 'Categoria', key: 'name',  width: 24 },
+      { header: 'Total',     key: 'total', width: 12 }
+    ];
+
+    sheetCats.getRow(1).font = { bold: true };
+    sheetCats.getRow(1).fill = {
+      type: 'pattern', pattern: 'solid',
+      fgColor: { argb: 'FFD9D9D9' }
+    };
+
+    for (const cat of categories) {
+      const count = await prisma.ticket.count({ where: { category_id: cat.id } });
+      sheetCats.addRow({ name: cat.name, total: count });
+    }
+
+    // ── Enviar respuesta ─────────────────────────────────────────────────────
+    const filename = `reporte-tickets-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error('Error exportando Excel:', error);
+    res.status(500).json({ success: false, message: 'Error generando el reporte' });
+  }
+};
+
+module.exports = { getDashboard, getByTech, getByCategory, getResolutionTime, exportToExcel };

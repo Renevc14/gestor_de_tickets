@@ -149,7 +149,10 @@ export const reportAPI = {
     api.get('/reports/by-category'),
 
   getResolutionTime: () =>
-    api.get('/reports/resolution-time')
+    api.get('/reports/resolution-time'),
+
+  exportExcel: () =>
+    api.get('/reports/export', { responseType: 'blob' })
 };
 
 // ─── Audit Logs (solo ADMINISTRADOR) ─────────────────────────────────────────

@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { clearAuth } from '../../services/api';
+import { clearAuth, reportAPI } from '../../services/api';
 import UserManagement from './UserManagement';
 import CategoryManagement from './CategoryManagement';
 import AuditLogs from '../AuditLogs';
@@ -46,6 +46,24 @@ const AdminPanel = () => {
 
   const handleLogout = () => { clearAuth(); navigate('/login'); };
 
+  const handleExportExcel = async () => {
+    try {
+      const res = await reportAPI.exportExcel();
+      const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const date = new Date().toISOString().slice(0, 10);
+      link.setAttribute('download', `reporte-tickets-${date}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Error al exportar el reporte');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-dark-bg">
       <header className="bg-gradient-to-r from-teams-blue to-teams-blue-hover shadow-lg">
@@ -66,12 +84,24 @@ const AdminPanel = () => {
                 <p className="text-xs mt-0.5" style={{ color: '#848E9C' }}>Gestion de usuarios, categorias y auditoria</p>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="btn-danger px-3 py-1.5 text-xs"
-            >
-              Cerrar sesion
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportExcel}
+                className="btn-secondary px-3 py-1.5 text-xs flex items-center gap-1.5"
+                title="Descargar reporte de tickets en Excel"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Exportar Excel
+              </button>
+              <button
+                onClick={handleLogout}
+                className="btn-danger px-3 py-1.5 text-xs"
+              >
+                Cerrar sesion
+              </button>
+            </div>
           </div>
 
           {/* Tabs */}
