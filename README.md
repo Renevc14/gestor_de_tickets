@@ -48,6 +48,13 @@ ENCRYPTION_KEY=<64-hex-chars>
 NODE_ENV=development
 PORT=5000
 FRONTEND_URL=http://localhost:3000
+
+# Notificaciones por email (opcional — si no se configura, se omiten silenciosamente)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=tu_email@gmail.com
+SMTP_PASS=tu_app_password_de_gmail
+SMTP_FROM=TicketFlow <tu_email@gmail.com>
 ```
 
 Generar secretos:
@@ -149,11 +156,12 @@ POST /api/auth/login
 | GET | `/api/tickets/:id` | Obtener detalle de ticket | Propietario/Asignado/Admin |
 | PATCH | `/api/tickets/:id` | Actualizar título/descripción/prioridad | Técnico asignado/Admin |
 | PATCH | `/api/tickets/:id/assign` | Asignar técnico | ADMINISTRADOR |
-| PATCH | `/api/tickets/:id/status` | Cambiar estado del workflow | TECNICO/ADMINISTRADOR |
+| PATCH | `/api/tickets/:id/status` | Cambiar estado del workflow | TECNICO/ADMIN/SOLICITANTE (solo RESUELTO→REABIERTO) |
 | POST | `/api/tickets/:id/comments` | Agregar comentario | Propietario/Asignado/Admin |
 | GET | `/api/tickets/:id/history` | Ver historial inmutable | Propietario/Asignado/Admin |
+| DELETE | `/api/tickets/:id` | Eliminacion logica (soft delete) | ADMINISTRADOR |
 
-**Query params (GET /api/tickets):** `status`, `priority`, `category_id`, `page`, `limit`
+**Query params (GET /api/tickets):** `status`, `priority`, `category_id`, `search`, `page`, `limit`
 
 **Ejemplo crear ticket:**
 ```json
@@ -212,6 +220,7 @@ Authorization: Bearer <token>
 | GET | `/api/reports/by-tech` | Carga de trabajo por técnico (asignados/resueltos) |
 | GET | `/api/reports/by-category` | Distribución por categoría con colores |
 | GET | `/api/reports/resolution-time` | Tiempo promedio de resolución por prioridad |
+| GET | `/api/reports/export` | Exportar reporte completo en formato Excel (.xlsx) |
 
 ---
 
@@ -233,6 +242,24 @@ Authorization: Bearer <token>
 
 ---
 
+## Tests automatizados
+
+```bash
+# Backend — tests de integracion contra base de datos real (Neon PostgreSQL)
+cd backend && npm test -- --forceExit
+
+# Frontend — tests de componentes (React Testing Library)
+cd frontend && npm test -- --watchAll=false
+```
+
+| Suite | Tests | Cobertura |
+|---|---|---|
+| `ticket-lifecycle-rbac.test.js` | 63 tests | Ciclo de vida completo, RBAC por rol, busqueda, Excel, soft delete |
+| `security-hardening.test.js` | 58 tests | Cifrado, JWT, rate limit, bloqueo de cuenta, MFA |
+| `auth-flows.test.jsx` | 24 tests | Login, registro, validaciones de formularios |
+
+---
+
 ## Seguridad implementada
 
 - **JWT**: access token 30min + refresh token 7d
@@ -250,12 +277,21 @@ Authorization: Bearer <token>
 
 ---
 
-## Despliegue Railway (producción)
+## Despliegue en produccion
+
+### Frontend — Vercel
+
+1. Importar el repositorio en Vercel, configurar el directorio raiz como `frontend/`
+2. Agregar variable de entorno: `REACT_APP_API_URL=https://tu-backend.railway.app/api`
+3. Vercel detecta React y construye con `npm run build` automaticamente
+
+### Backend — Railway
 
 1. Crear proyecto en Railway, agregar servicio PostgreSQL
-2. El `DATABASE_URL` se inyecta automáticamente en el entorno
-3. Configurar las demás variables de entorno en Railway Dashboard
-4. Push al branch conectado — Railway despliega automáticamente
+2. Conectar el repositorio apuntando al directorio `backend/`
+3. El `DATABASE_URL` se inyecta automaticamente en el entorno
+4. Configurar las demas variables de entorno en Railway Dashboard
+5. Push al branch conectado — Railway despliega automaticamente
 
 ```env
 # Railway provee DATABASE_URL — solo agregar:
@@ -283,7 +319,7 @@ GestorDeTickets/
 │   │   │                  # ticket_history, attachments, audit_logs
 │   │   └── seed.js        # Categorías iniciales + usuarios demo
 │   ├── routes/         # auth, tickets, users, categories, reports, audit
-│   ├── services/       # slaService.js (cron cada 5min)
+│   ├── services/       # slaService.js (cron cada 5min), emailService.js
 │   └── server.js
 └── frontend/
     └── src/
