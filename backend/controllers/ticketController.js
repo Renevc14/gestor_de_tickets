@@ -93,7 +93,7 @@ const createTicket = async (req, res) => {
  */
 const listTickets = async (req, res) => {
   try {
-    const { status, priority, category_id, page = 1, limit = 10 } = req.query;
+    const { status, priority, category_id, search, page = 1, limit = 10 } = req.query;
 
     const roleWhere = getTicketFilters(req.user);
 
@@ -101,6 +101,13 @@ const listTickets = async (req, res) => {
     if (status) where.status = status;
     if (priority) where.priority = priority;
     if (category_id) where.category_id = parseInt(category_id);
+    if (search && search.trim()) {
+      const term = search.trim();
+      where.OR = [
+        { title: { contains: term, mode: 'insensitive' } },
+        { description: { contains: term, mode: 'insensitive' } }
+      ];
+    }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 

@@ -458,7 +458,6 @@ describe('Escenario 4 — Validación de campos y valores inválidos', () => {
   });
 });
 
-// ===============================================================================
 // ESCENARIO 5: SOLICITANTE solicita reapertura de ticket resuelto
 // ===============================================================================
 
@@ -527,7 +526,6 @@ describe('Escenario 5 — Reapertura por SOLICITANTE', () => {
   });
 });
 
-// ===============================================================================
 // ESCENARIO 6: Exportacion de reportes a Excel (RF06)
 // ===============================================================================
 
@@ -563,5 +561,65 @@ describe('Escenario 6 — Exportacion a Excel', () => {
       .set('Authorization', `Bearer ${tecnicoToken}`);
 
     expect(res.status).toBe(403);
+  });
+});
+
+// ===============================================================================
+// ESCENARIO 7: Busqueda por palabras clave (RF02)
+// ===============================================================================
+
+describe('Escenario 7 — Busqueda por palabras clave', () => {
+  const uniqueKeyword = `keyword-${Date.now()}`;
+
+  beforeAll(async () => {
+    await request(app)
+      .post('/api/tickets')
+      .set('Authorization', `Bearer ${solicitanteAToken}`)
+      .send({
+        title: `Ticket con ${uniqueKeyword} en el titulo`,
+        description: 'Descripcion de prueba para busqueda',
+        category_id: testCategory.id
+      });
+  });
+
+  test('buscar por keyword en titulo retorna el ticket correspondiente', async () => {
+    const res = await request(app)
+      .get(`/api/tickets?search=${uniqueKeyword}`)
+      .set('Authorization', `Bearer ${solicitanteAToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.tickets.length).toBeGreaterThanOrEqual(1);
+    const found = res.body.tickets.find(t => t.title.includes(uniqueKeyword));
+    expect(found).toBeDefined();
+  });
+
+  test('buscar keyword inexistente retorna lista vacia', async () => {
+    const res = await request(app)
+      .get('/api/tickets?search=zzz-nonexistent-xyz-99999')
+      .set('Authorization', `Bearer ${solicitanteAToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.tickets).toHaveLength(0);
+  });
+
+  test('busqueda es case-insensitive', async () => {
+    const res = await request(app)
+      .get(`/api/tickets?search=${uniqueKeyword.toUpperCase()}`)
+      .set('Authorization', `Bearer ${solicitanteAToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.tickets.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('busqueda sin parametro retorna todos los tickets del usuario', async () => {
+    const all = await request(app)
+      .get('/api/tickets')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    const withSearch = await request(app)
+      .get('/api/tickets?search=')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(withSearch.body.pagination.total).toBe(all.body.pagination.total);
   });
 });

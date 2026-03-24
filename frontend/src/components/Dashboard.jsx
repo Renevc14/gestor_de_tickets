@@ -303,17 +303,28 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);   // skeleton inicial
   const [fetching, setFetching] = useState(false); // recarga silenciosa
   const [error, setError] = useState('');
-  const [filters, setFilters] = useState({ status: '', priority: '', page: 1, limit: 10 });
+  const [filters, setFilters] = useState({ status: '', priority: '', search: '', page: 1, limit: 10 });
+  const [searchInput, setSearchInput] = useState('');
   const [pagination, setPagination] = useState({});
   const [metrics, setMetrics] = useState(null);
   const [loadingMetrics, setLoadingMetrics] = useState(false);
 
-  // Tickets: recarga con cada cambio de filtro/página
+  // Tickets: recarga con cada cambio de filtro/página/búsqueda
   useEffect(() => {
     if (!user) { navigate('/login'); return; }
     loadTickets();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.status, filters.priority, filters.page]);
+  }, [filters.status, filters.priority, filters.page, filters.search]);
+
+  // Debounce para el campo de búsqueda (400 ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setTickets([]);
+      setFilters(prev => ({ ...prev, search: searchInput, page: 1 }));
+    }, 400);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
 
   // Métricas: solo se cargan una vez al montar el componente
   useEffect(() => {
@@ -454,7 +465,17 @@ const Dashboard = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="form-group">
+              <label className="label">Buscar</label>
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Titulo o descripcion..."
+                className="input"
+              />
+            </div>
             <div className="form-group">
               <label className="label">Estado</label>
               <select name="status" value={filters.status} onChange={handleFilterChange} className="input">
@@ -479,7 +500,7 @@ const Dashboard = () => {
             </div>
             <div className="flex items-end">
               <button
-                onClick={() => { setTickets([]); setFilters({ status: '', priority: '', page: 1, limit: 10 }); }}
+                onClick={() => { setTickets([]); setSearchInput(''); setFilters({ status: '', priority: '', search: '', page: 1, limit: 10 }); }}
                 className="btn-secondary w-full"
               >
                 Limpiar Filtros
