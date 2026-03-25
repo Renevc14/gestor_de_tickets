@@ -284,7 +284,7 @@ const assignTicket = async (req, res) => {
 
     await logAuditEvent(req.user.id, 'ticket_assigned', 'ticket', id, { tech_id }, req, true);
 
-    emailService.sendTicketAssigned(tech, updated).catch(() => {});
+    emailService.sendTicketAssigned(tech, updated).catch(err => console.error('[email] sendTicketAssigned:', err.message));
 
     res.status(200).json({ success: true, message: 'Ticket asignado', ticket: updated });
   } catch (error) {
@@ -348,14 +348,14 @@ const changeStatus = async (req, res) => {
 
     // Notificacion al creador del ticket
     if (updated.creator) {
-      emailService.sendStatusChanged(updated.creator, updated, ticket.status, status).catch(() => {});
+      emailService.sendStatusChanged(updated.creator, updated, ticket.status, status).catch(err => console.error('[email] sendStatusChanged:', err.message));
     }
 
     // Si se reabrio, notificar a administradores
     if (status === 'REABIERTO') {
       prisma.user.findMany({ where: { role: 'ADMINISTRADOR', status: 'ACTIVO' } })
         .then(admins => {
-          admins.forEach(admin => emailService.sendTicketReopened(admin, updated).catch(() => {}));
+          admins.forEach(admin => emailService.sendTicketReopened(admin, updated).catch(err => console.error('[email] sendTicketReopened:', err.message)));
         })
         .catch(() => {});
     }
