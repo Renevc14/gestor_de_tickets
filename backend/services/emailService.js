@@ -3,33 +3,27 @@
  * Monografia UCB: notificaciones al asignar ticket y al cambiar estado
  *
  * En modo test (NODE_ENV=test) retorna silenciosamente sin enviar.
- * Requiere variables de entorno: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+ * Requiere variable de entorno: RESEND_API_KEY
  */
 
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-// ─── Transporter ──────────────────────────────────────────────────────────────
-
-function createTransporter() {
-  return nodemailer.createTransport({
-    host:   process.env.SMTP_HOST,
-    port:   parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_PORT === '465',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
+function getClient() {
+  if (!process.env.RESEND_API_KEY) return null;
+  return new Resend(process.env.RESEND_API_KEY);
 }
 
 async function sendMail(options) {
   if (process.env.NODE_ENV === 'test') return;
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER) return;
 
-  const transporter = createTransporter();
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
-    ...options
+  const client = getClient();
+  if (!client) return;
+
+  await client.emails.send({
+    from: process.env.SMTP_FROM || 'TicketFlow <onboarding@resend.dev>',
+    to:      options.to,
+    subject: options.subject,
+    text:    options.text
   });
 }
 

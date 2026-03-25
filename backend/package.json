@@ -48,8 +48,9 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^4.2.1",
-    "nodemailer": "^7.0.10",
+    "nodemailer": "^7.0.13",
     "qrcode": "^1.5.3",
+    "resend": "^6.9.4",
     "speakeasy": "^2.0.0"
   },
   "devDependencies": {
